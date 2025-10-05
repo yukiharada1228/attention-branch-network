@@ -2,12 +2,10 @@ import argparse
 import math
 import os
 import random
-import shutil
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from transformers import Trainer, TrainingArguments
@@ -265,7 +263,7 @@ def parse_args():
         "--schedule",
         type=int,
         nargs="+",
-        default=[30, 60],
+        default=[31, 61],
         help="Decrease learning rate at these epochs.",
     )
     p.add_argument(
@@ -305,12 +303,10 @@ def parse_args():
         "--arch",
         "-a",
         metavar="ARCH",
-        default="resnet18",
+        default="resnet152",
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         help="model architecture",
     )
-    # cifar_stem is always True; CLI flag removed
-    # Miscs
     p.add_argument("--manualSeed", type=int, help="manual seed")
     p.add_argument(
         "-e",
