@@ -1,0 +1,8 @@
+# attention-branch-network
+
+## Acknowledgements
+This project includes code from:
+"Attention Branch Network: Learning of Attention Mechanism for Visual Explanation"  
+by Hiroshi Fukui, Tsubasa Hirakawa, Takayoshi Yamashita, and Hironobu Fujiyoshi,  
+licensed under the MIT License.  
+Original repository: [https://github.com/machine-perception-robotics-group/attention_branch_network](https://github.com/machine-perception-robotics-group/attention_branch_network)
