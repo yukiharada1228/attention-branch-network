@@ -122,18 +122,27 @@ def main(args):
     if args.dataset == "plantvillage":
         # Use the PlantVillage directory structure
         data_dir = "./data/PlantVillage"
-        train_data = datasets.ImageFolder(root=data_dir, transform=transform_train)
-        # For PlantVillage, we'll use the same data for both train and test
-        # In practice, you might want to split the data properly
-        test_data = datasets.ImageFolder(root=data_dir, transform=transform_test)
+        # Create two dataset views with different transforms
+        full_train = datasets.ImageFolder(root=data_dir, transform=transform_train)
+        full_test = datasets.ImageFolder(root=data_dir, transform=transform_test)
+
+        # Split indices with 80/20 using the provided seed for reproducibility
+        num_samples = len(full_train)
+        split_idx = int(num_samples * 0.8)
+        g = torch.Generator()
+        g.manual_seed(args.manualSeed)
+        perm = torch.randperm(num_samples, generator=g).tolist()
+        train_indices = perm[:split_idx]
+        test_indices = perm[split_idx:]
+
+        # Build Subset datasets so that transforms differ between train/eval
+        train_data = torch.utils.data.Subset(full_train, train_indices)
+        test_data = torch.utils.data.Subset(full_test, test_indices)
     else:
         raise ValueError("Dataset can only be plantvillage.")
 
     data_collator = DataCollatorImageClassification()
 
-    # Training args (match original options)
-    # Save every N epochs by converting epochs to steps
-    num_update_steps_per_epoch_for_save = math.ceil(len(train_data) / args.train_batch)
     training_args = TrainingArguments(
         output_dir=args.checkpoint,
         per_device_train_batch_size=args.train_batch,
@@ -307,7 +316,7 @@ def parse_args():
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         help="model architecture",
     )
-    p.add_argument("--manualSeed", type=int, help="manual seed")
+    p.add_argument("--manualSeed", type=int, default=42, help="manual seed (default: 42)")
     p.add_argument(
         "-e",
         "--evaluate",
