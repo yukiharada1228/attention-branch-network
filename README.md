@@ -83,6 +83,26 @@ uv run visualize.py
 - ResNet101
 - ResNet152
 
+## 学習結果
+
+### 実験条件
+- **モデル**: ResNet152ベースのAttention Branch Network
+- **データセット**: PlantVillage (15クラス, 224x224画像)
+- **データ分割**: 80%学習, 20%評価
+- **エポック数**: 90エポック
+- **バッチサイズ**: 64 (学習), 100 (評価)
+- **学習率**: 0.1 (初期)
+- **最適化**: SGD (momentum=0.9, weight_decay=1e-4)
+- **スケジューラ**: ステップ学習率 (31, 61エポックで0.1倍)
+- **データ拡張**: RandomResizedCrop, RandomHorizontalFlip
+- **正規化**: ImageNet標準
+
+### 最終精度
+- **最高精度**: 99.7% (checkpoint-20382)
+- **最終エポック**: 90エポック
+- **総ステップ数**: 23,220ステップ
+
+
 ## 依存関係
 
 - PyTorch
