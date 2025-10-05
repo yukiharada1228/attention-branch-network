@@ -7,7 +7,9 @@ requires-python = ">=3.12"
 dependencies = [
     "accelerate>=1.10.1",
     "kaggle>=1.7.4.5",
+    "matplotlib>=3.10.6",
     "numpy>=2.3.3",
+    "opencv-python>=4.11.0.86",
     "torchvision>=0.23.0",
     "transformers>=4.57.0",
 ]

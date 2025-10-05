@@ -316,7 +316,9 @@ def parse_args():
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         help="model architecture",
     )
-    p.add_argument("--manualSeed", type=int, default=42, help="manual seed (default: 42)")
+    p.add_argument(
+        "--manualSeed", type=int, default=42, help="manual seed (default: 42)"
+    )
     p.add_argument(
         "-e",
         "--evaluate",
