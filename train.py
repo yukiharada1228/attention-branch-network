@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 import random
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,14 +10,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from transformers import Trainer, TrainingArguments
 
-from models import (
-    ABNConfig,
-    ABNForImageClassification,
-    build_from_arch,
-)
-
-
-from typing import Optional
+from models import ABNConfig, ABNForImageClassification, build_from_arch
 
 
 class DataCollatorImageClassification:

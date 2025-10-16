@@ -9,7 +9,7 @@ import torch.nn as nn
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
-from train import ABNForImageClassification
+from models import ABNForImageClassification
 
 
 def denormalize(img: np.ndarray):

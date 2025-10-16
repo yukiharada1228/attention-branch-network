@@ -110,5 +110,3 @@ class ABNForImageClassification(nn.Module):
         if labels is not None:
             loss = self.loss_fn(att_logits, labels) + self.loss_fn(per_logits, labels)
         return {"loss": loss, "logits": per_logits}
-
-
