@@ -204,25 +204,65 @@ def main(args):
     softmax = nn.Softmax(dim=1)
 
     with torch.no_grad():
-        # faithfully reproduce the reference visualization flow
-        images, labels = next(iter(loader))
-        images = images.to(device)
-        labels = labels.to(device)
+        # 各クラスごとに一枚ずつ表示するために、クラスごとに画像を収集
+        classes_list = list(idx_to_cls) if idx_to_cls else []
+        num_classes = len(classes_list) if classes_list else 10
 
-        _, outputs, attention = model(images)
-        outputs = softmax(outputs)
-        conf_data = outputs.data.topk(k=1, dim=1, largest=True, sorted=True)
-        _, predicted = outputs.max(1)
+        # 各クラスから一枚ずつ画像を取得
+        class_images = {}
+        class_labels = {}
+        class_attentions = {}
+        class_predictions = {}
+        class_confidences = {}
 
-        c_att = attention.data.cpu().numpy()
-        d_inputs = images.data.cpu().numpy()
+        # データローダーから各クラスの最初の画像を収集
+        for images, labels in loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            
+            _, outputs, attention = model(images)
+            outputs = softmax(outputs)
+            conf_data = outputs.data.topk(k=1, dim=1, largest=True, sorted=True)
+            _, predicted = outputs.max(1)
+            
+            # 各クラスの最初の画像を1つずつ収集
+            for i, (img, label) in enumerate(zip(images, labels)):
+                cls_idx = label.item()
+                if cls_idx not in class_images:
+                    class_images[cls_idx] = img
+                    class_labels[cls_idx] = label
+                    class_attentions[cls_idx] = attention[i]
+                    class_predictions[cls_idx] = predicted[i]
+                    class_confidences[cls_idx] = conf_data[0][i]
+                    
+                    # 全てのクラスを収集したら終了
+                    if len(class_images) >= num_classes:
+                        break
+            
+            if len(class_images) >= num_classes:
+                break
 
+        # 可視化用のデータを準備
         v_list = []
         att_list = []
-        in_b, in_c, in_y, in_x = images.shape
-        for item_img, item_att in zip(d_inputs, c_att):
-            v_img = denormalize(item_img)
-            resize_att = cv2.resize(item_att[0], (in_x, in_y))
+        label_list = []
+        pred_list = []
+        conf_list = []
+
+        for cls_idx in sorted(class_images.keys()):
+            img = class_images[cls_idx]
+            att = class_attentions[cls_idx]
+            pred = class_predictions[cls_idx]
+            conf = class_confidences[cls_idx]
+
+            # 画像の前処理
+            d_input = img.data.cpu().numpy()
+            v_img = denormalize(d_input)
+
+            # アテンションマップの前処理
+            c_att = att.data.cpu().numpy()
+            in_c, in_y, in_x = img.shape
+            resize_att = cv2.resize(c_att[0], (in_x, in_y))
             resize_att = min_max(resize_att)
             resize_att *= 255.0
 
@@ -230,52 +270,37 @@ def main(args):
             resize_att = np.uint8(resize_att)
             jet_map = cv2.applyColorMap(resize_att, cv2.COLORMAP_JET)
             jet_map = cv2.addWeighted(v_img, 0.6, jet_map, 0.4, 0)
+
             v_list.append(v_img)
             att_list.append(jet_map)
+            label_list.append(cls_idx)
+            pred_list.append(pred.item())
+            conf_list.append(conf.item())
+
+        # 表示用のレイアウトを計算
+        num_images = len(v_list)
+        # 行数に応じて列数を自動調整
+        rows = args.rows
+        cols = (num_images + rows - 1) // rows  # 切り上げで列数を計算
 
         # Show input images
-        cols = args.cols
-        rows = args.rows
-        classes_list = list(idx_to_cls) if idx_to_cls else []
-
-        fig_inputs = plt.figure(figsize=(14, 3.0), dpi=args.dpi)
-        plt.title("Input image")
+        fig_inputs = plt.figure(figsize=(cols * 2, rows * 2), dpi=args.dpi)
         plt.axis("off")
-        for r in range(rows):
-            for c in range(cols):
-                if c >= len(labels):
-                    break
-                cls_idx = labels[c].item()
-                ax = fig_inputs.add_subplot(r + 1, cols, c + 1)
-                title_txt = (
-                    classes_list[cls_idx]
-                    if classes_list and cls_idx < len(classes_list)
-                    else str(cls_idx)
-                )
-                plt.title(f"{title_txt}")
-                ax.imshow(v_list[cols * r + c])
-                ax.set_axis_off()
+
+        for i, v_img in enumerate(v_list):
+            ax = fig_inputs.add_subplot(rows, cols, i + 1)
+            ax.imshow(v_img)
+            ax.set_axis_off()
         plt.tight_layout()
 
         # Show attention maps
-        fig_att = plt.figure(figsize=(14, 3.5), dpi=args.dpi)
-        plt.title("Attention map")
+        fig_att = plt.figure(figsize=(cols * 2, rows * 2), dpi=args.dpi)
         plt.axis("off")
-        for r in range(rows):
-            for c in range(cols):
-                if c >= len(predicted):
-                    break
-                pred_idx = predicted[c].item()
-                conf = conf_data[0][c].item()
-                ax = fig_att.add_subplot(r + 1, cols, c + 1)
-                ax.imshow(att_list[cols * r + c])
-                pred_name = (
-                    classes_list[pred_idx]
-                    if classes_list and pred_idx < len(classes_list)
-                    else str(pred_idx)
-                )
-                plt.title(f"pred: {pred_name}\nconf: {conf:.2f}")
-                ax.set_axis_off()
+
+        for i, att_img in enumerate(att_list):
+            ax = fig_att.add_subplot(rows, cols, i + 1)
+            ax.imshow(att_img)
+            ax.set_axis_off()
         plt.tight_layout()
 
         # Save figures to outputs (always)
@@ -344,7 +369,7 @@ def parse_args():
     )
     # Visualization layout and saving
     p.add_argument("--cols", type=int, default=8)
-    p.add_argument("--rows", type=int, default=1)
+    p.add_argument("--rows", type=int, default=2)
     p.add_argument(
         "--out-dir", type=str, default="outputs", help="directory to save figures"
     )
