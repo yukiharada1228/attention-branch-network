@@ -8,10 +8,8 @@ import torch
 import torch.nn as nn
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-from safetensors.torch import load_file as safe_load_file
 
-from models.resnet_abn import (ResNetABN, resnet18_abn, resnet34_abn,
-                               resnet50_abn, resnet101_abn, resnet152_abn)
+from train import ABNForImageClassification
 
 
 def denormalize(img: np.ndarray):
@@ -28,119 +26,6 @@ def min_max(x, axis=None):
     return (x - x_min) / (x_max - x_min)
 
 
-def build_from_arch(arch: str, num_classes: int) -> ResNetABN:
-    a = (arch or "").lower()
-    if a == "resnet18":
-        return resnet18_abn(num_classes=num_classes)
-    if a == "resnet34":
-        return resnet34_abn(num_classes=num_classes)
-    if a == "resnet50":
-        return resnet50_abn(num_classes=num_classes)
-    if a == "resnet101":
-        return resnet101_abn(num_classes=num_classes)
-    if a == "resnet152":
-        return resnet152_abn(num_classes=num_classes)
-    raise ValueError(f"unknown arch: {arch}")
-
-
-def _resolve_safetensors_path(ckpt_path: str) -> str:
-    """Return path to .safetensors if input is a dir or a file; else empty."""
-    if os.path.isdir(ckpt_path):
-        cand = os.path.join(ckpt_path, "model.safetensors")
-        if os.path.exists(cand):
-            return cand
-    if ckpt_path.endswith(".safetensors") and os.path.exists(ckpt_path):
-        return ckpt_path
-    return ""
-
-
-def _strip_known_prefixes(key: str) -> str:
-    prefixes = (
-        "model.base_model.",
-        "module.base_model.",
-        "base_model.",
-        "model.",
-        "module.",
-    )
-    for p in prefixes:
-        if key.startswith(p):
-            return key[len(p) :]
-    return key
-
-
-def _load_weights_into_base_model(
-    base_model: ResNetABN, ckpt_path: str, device: torch.device
-):
-    """Load weights into base_model from either safetensors or torch checkpoint.
-
-    Supports:
-    - Hugging Face-style `model.safetensors` containing keys prefixed with "base_model."
-    - Raw safetensors state dict matching base model
-    - torch.save dict with key "model" for base model state dict
-    - raw torch state dict
-    """
-    if not ckpt_path:
-        raise FileNotFoundError(
-            "--ckpt が未指定です。Trainer出力ディレクトリ（例: .../checkpoint-XXXX）または model.safetensors のパスを指定してください。"
-        )
-
-    st_path = _resolve_safetensors_path(ckpt_path)
-    if st_path:
-        state = safe_load_file(st_path, device=str(device))
-        normalized = {_strip_known_prefixes(k): v for k, v in state.items()}
-        missing, unexpected = base_model.load_state_dict(normalized, strict=False)
-        if unexpected:
-            pass
-        return
-
-    # Fallback to torch checkpoints
-    try:
-        ckpt = torch.load(ckpt_path, map_location=device)
-    except FileNotFoundError as e:
-        raise FileNotFoundError(
-            f"チェックポイントが見つかりません: {ckpt_path}. ディレクトリ（model.safetensorsを含む）またはファイルを指定してください。"
-        ) from e
-    if isinstance(ckpt, dict) and "model" in ckpt:
-        state = ckpt["model"]
-    else:
-        state = ckpt
-    normalized = {_strip_known_prefixes(k): v for k, v in state.items()}
-    base_model.load_state_dict(normalized, strict=False)
-
-
-def _read_normalized_state_dict(ckpt_path: str, device: torch.device):
-    if not ckpt_path:
-        raise FileNotFoundError(
-            "--ckpt が未指定です。Trainer出力ディレクトリ（例: .../checkpoint-XXXX）または model.safetensors のパスを指定してください。"
-        )
-    st_path = _resolve_safetensors_path(ckpt_path)
-    if st_path:
-        state = safe_load_file(st_path, device=str(device))
-    else:
-        ckpt = torch.load(ckpt_path, map_location=device)
-        if isinstance(ckpt, dict) and "model" in ckpt:
-            state = ckpt["model"]
-        else:
-            state = ckpt
-    normalized = {_strip_known_prefixes(k): v for k, v in state.items()}
-    return normalized
-
-
-def _infer_num_classes_from_state(state_dict) -> int | None:
-    # Prefer classifier fc weight when available
-    w = state_dict.get("fc.weight")
-    if w is not None and hasattr(w, "shape") and len(w.shape) == 2:
-        return int(w.shape[0])
-    # Fallback to attention head conv/bn shapes
-    w = state_dict.get("att_head.1.weight")
-    if w is not None and hasattr(w, "shape") and len(w.shape) >= 1:
-        return int(w.shape[0])
-    w = state_dict.get("att_head.2.weight")
-    if w is not None and hasattr(w, "shape") and len(w.shape) >= 1:
-        return int(w.shape[0])
-    return None
-
-
 def main(args):
     if args.gpu_id:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -149,33 +34,12 @@ def main(args):
         "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     )
 
-    # Try to read checkpoint first to infer number of classes
-    normalized_state = None
-    inferred_num_classes = None
-    if args.ckpt:
-        try:
-            normalized_state = _read_normalized_state_dict(args.ckpt, device)
-            inferred_num_classes = _infer_num_classes_from_state(normalized_state)
-        except Exception:
-            normalized_state = None
-            inferred_num_classes = None
-
-    # クラス数（ckptから推定がなければ Imagenette=10 を既定）
-    if inferred_num_classes is not None:
-        num_classes = inferred_num_classes
-    else:
-        num_classes = 10
-
-    # model (train.py と同等のビルド)
-    model = build_from_arch(args.arch, num_classes=num_classes).to(device)
-
+    # from_pretrained で学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
-
-    if normalized_state is not None:
-        model.load_state_dict(normalized_state, strict=False)
-    else:
-        _load_weights_into_base_model(model, args.ckpt, device)
-    model.eval()
+    model_wrapper = ABNForImageClassification.from_pretrained(
+        args.ckpt, arch=args.arch, map_location=device, strict=False
+    )
+    model_wrapper.eval()
 
     # 評価用の変換 (train.py に準拠)
     transform_test = transforms.Compose(
@@ -219,12 +83,13 @@ def main(args):
         for images, labels in loader:
             images = images.to(device)
             labels = labels.to(device)
-            
-            _, outputs, attention = model(images)
+
+            # ABN のアテンションは base_model 側の forward 出力を利用
+            _, outputs, attention = model_wrapper.base_model(images)
             outputs = softmax(outputs)
             conf_data = outputs.data.topk(k=1, dim=1, largest=True, sorted=True)
             _, predicted = outputs.max(1)
-            
+
             # 各クラスの最初の画像を1つずつ収集
             for i, (img, label) in enumerate(zip(images, labels)):
                 cls_idx = label.item()
@@ -234,11 +99,11 @@ def main(args):
                     class_attentions[cls_idx] = attention[i]
                     class_predictions[cls_idx] = predicted[i]
                     class_confidences[cls_idx] = conf_data[0][i]
-                    
+
                     # 全てのクラスを収集したら終了
                     if len(class_images) >= num_classes:
                         break
-            
+
             if len(class_images) >= num_classes:
                 break
 
