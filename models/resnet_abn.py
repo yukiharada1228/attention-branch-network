@@ -90,3 +90,18 @@ def resnet152_abn(num_classes: int = 1000) -> ResNetABN:
         layers=(3, 8, 36, 3),
         num_classes=num_classes,
     )
+
+
+def build_from_arch(arch: str, num_classes: int) -> ResNetABN:
+    a = (arch or "").lower()
+    if a == "resnet18":
+        return resnet18_abn(num_classes=num_classes)
+    if a == "resnet34":
+        return resnet34_abn(num_classes=num_classes)
+    if a == "resnet50":
+        return resnet50_abn(num_classes=num_classes)
+    if a == "resnet101":
+        return resnet101_abn(num_classes=num_classes)
+    if a == "resnet152":
+        return resnet152_abn(num_classes=num_classes)
+    raise ValueError(f"unknown arch: {arch}")
