@@ -8,14 +8,6 @@ from safetensors.torch import load_file as safe_load_file
 from .resnet_abn import build_from_arch
 
 
-class ABNConfig:
-    def __init__(self, arch: str, dataset: str, num_labels: int):
-        self._name_or_path = arch
-        self.arch = arch
-        self.dataset = dataset
-        self.num_labels = num_labels
-
-
 class ABNForImageClassification(nn.Module):
     def __init__(self, base_model: nn.Module):
         super().__init__()
@@ -91,17 +83,10 @@ class ABNForImageClassification(nn.Module):
 
         # 6) ラッパー生成と簡易 config
         model = cls(base_model)
-        try:
-            model.config = ABNConfig(
-                arch=final_arch, dataset="unknown", num_labels=final_num_labels
-            )
-        except Exception:
-            pass
+
         # 7) 読み込みデバイスへ移動
-        try:
-            model.to(map_location)
-        except Exception:
-            pass
+        model.to(map_location)
+
         return model
 
     def forward(self, pixel_values=None, labels=None, **kwargs):

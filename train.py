@@ -10,7 +10,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from transformers import Trainer, TrainingArguments
 
-from models import ABNConfig, ABNForImageClassification, build_from_arch
+from models import ABNForImageClassification, build_from_arch
 
 
 class DataCollatorImageClassification:
@@ -95,9 +95,6 @@ def main(args):
     else:
         base_model = build_from_arch(args.arch, num_classes=num_classes)
         model = ABNForImageClassification(base_model)
-    model.config = ABNConfig(
-        arch=args.arch, dataset="imagenette", num_labels=num_classes
-    )
 
     data_collator = DataCollatorImageClassification()
 
