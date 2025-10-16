@@ -1,53 +1,58 @@
 # attention-branch-network
 
-Attention Branch Network（ABN）の実装で、植物病害分類タスクに適用したプロジェクトです。可視化機能により、モデルがどの部分に注目しているかを視覚的に確認できます。
+Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagenette`（10クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
 ## 概要
 
-このプロジェクトは、PlantVillageデータセットを使用して植物の病害を分類するAttention Branch Networkを実装しています。ABNは、分類タスクと同時に注意機構を学習し、モデルの判断根拠を可視化できるアーキテクチャです。
+このプロジェクトは ABN を ResNet 系バックボーン上に実装し、Imagenette データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
 
 ## 主な機能
 
-- **植物病害分類**: PlantVillageデータセットを使用した多クラス分類
-- **注意機構の可視化**: モデルが注目している領域をヒートマップで表示
-- **複数のResNetアーキテクチャ対応**: ResNet18, 34, 50, 101, 152
-- **可視化スクリプト**: 学習済みモデルから注意マップを生成
+- **Imagenette 10クラス分類**: 公式の `train/val` 分割をそのまま利用
+- **注意機構の可視化**: 注意マップをヒートマップ重畳で保存
+- **複数の ResNet 対応**: ResNet18/34/50/101/152
+- **Trainer 連携**: 最良モデルの自動保存・読み込みに対応
+- **チェックポイント互換**: `model.safetensors` と `checkpoint-XXXX` のどちらからでも可視化可能
 
 ## プロジェクト構造
 
 ```
 attention-branch-network/
-├── models/                 # ABNモデル実装
-│   └── resnet_abn.py      # ResNetベースのABN実装
-├── data/                  # データセット
-│   └── PlantVillage/      # PlantVillageデータセット
-├── checkpoint/            # 学習済みモデル
-├── outputs/              # 可視化結果
-│   ├── abn_attentions.png # 注意マップ可視化
-│   └── abn_inputs.png     # 入力画像
-├── train.py              # 学習スクリプト
-├── visualize.py          # 可視化スクリプト
-├── main.py               # メインエントリーポイント
-└── pyproject.toml         # 依存関係定義
+├── models/                 # ABN モデル実装
+│   └── resnet_abn.py
+├── data/                  # データセット（初回実行時に自動ダウンロード）
+│   └── Imagenette/
+├── checkpoint/            # Trainer 出力（最良モデルや epoch ごとの ckpt）
+├── outputs/               # 可視化結果（PNG）
+│   ├── abn_attentions.png
+│   └── abn_inputs.png
+├── train.py               # 学習・評価（HF Trainer）
+├── visualize.py           # 注意マップ可視化
+├── main.py                # エントリ（サンプル）
+├── pyproject.toml         # 依存関係（uv 対応）
+└── uv.lock
 ```
+
+## 動作環境
+
+- Python 3.12 以上
+- CUDA 環境（任意。CPU でも動作）
 
 ## セットアップ
 
-### 依存関係のインストール
-
 ```bash
-# uvを使用（推奨）
+# uv を使用（推奨）
 uv sync
 ```
 
-### データセットの準備
+## データセット（Imagenette）
 
-```bash
-# PlantVillageデータセットをダウンロード
-./download.sh
-```
+`train.py`/`visualize.py` は初回実行時に Imagenette を自動ダウンロードします。
 
-## 使用方法
+- 既定の保存先: `./data/Imagenette`
+- サイズ指定: `--imagenette-size {full|320px|160px}`（既定: `full`）
+
+## 使い方
 
 ### 学習
 
@@ -55,64 +60,66 @@ uv sync
 uv run train.py
 ```
 
-### 可視化
+- 最良モデルは `--checkpoint` で指定したディレクトリに保存されます（例: `checkpoint/model.safetensors`）。
+- 学習途中のチェックポイントは `checkpoint-XXXX/` 形式で保存されます。
+
+#### 評価のみ
 
 ```bash
-uv run visualize.py
+uv run train.py --evaluate --checkpoint checkpoint --gpu-id 0
 ```
+
+### 可視化（注意マップ）
+
+最良モデル（`checkpoint/model.safetensors`）または任意の `checkpoint-XXXX/` を指定できます。
+
+```bash
+# 最良モデルから可視化（既定パス）
+uv run visualize.py --ckpt checkpoint/model.safetensors --out-dir outputs --prefix abn
+
+# あるエポックの ckpt を指定
+uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix abn
+```
+
+主なオプション（学習/可視化）:
+
+- `--arch {resnet18,resnet34,resnet50,resnet101,resnet152}`（既定: `resnet152`）
+- `--imagenette-root`（既定: `./data/Imagenette`）
+- `--imagenette-size {full|320px|160px}`
+- `-j/--workers` DataLoader ワーカ数（既定: 4）
+- `--gpu-id` または `--cpu`（可視化のみ）
+- `--checkpoint`（学習の出力先）/`--ckpt`（可視化の入力元）
 
 ## 可視化結果
 
-`outputs/`ディレクトリには以下の可視化結果が保存されます：
-
-### 注意マップ可視化
-![Attention Maps](outputs/abn_attentions.png)
-*モデルが注目している領域をヒートマップで表示*
+`outputs/` には以下の画像が保存されます。
 
 ### 入力画像
 ![Input Images](outputs/abn_inputs.png)
-*元の入力画像*
 
-これらの可視化により、モデルが植物のどの部分に注目して病害を判定しているかを確認できます。
+### 注意マップ
+![Attention Maps](outputs/abn_attentions.png)
 
 ## 対応アーキテクチャ
 
 - ResNet18
-- ResNet34  
+- ResNet34
 - ResNet50
 - ResNet101
 - ResNet152
 
-## 学習結果
-
-### 実験条件
-- **モデル**: ResNet152ベースのAttention Branch Network
-- **データセット**: PlantVillage (15クラス, 224x224画像)
-- **データ分割**: 80%学習, 20%評価
-- **エポック数**: 90エポック
-- **バッチサイズ**: 64 (学習), 100 (評価)
-- **学習率**: 0.1 (初期)
-- **最適化**: SGD (momentum=0.9, weight_decay=1e-4)
-- **スケジューラ**: ステップ学習率 (31, 61エポックで0.1倍)
-- **データ拡張**: RandomResizedCrop, RandomHorizontalFlip
-- **正規化**: ImageNet標準
-
-### 最終精度
-- **最高精度**: 99.7% (checkpoint-20382)
-- **最終エポック**: 90エポック
-- **総ステップ数**: 23,220ステップ
-
-
 ## 依存関係
 
-- PyTorch
-- Transformers
-- Matplotlib（可視化用）
-- OpenCV（画像処理用）
+- PyTorch / torchvision
+- Transformers / Accelerate
 - NumPy
-- Accelerate
+- Matplotlib（可視化）
+- OpenCV（画像処理）
+- safetensors（チェックポイント読込に使用）
 
 ## ライセンス
+
+このリポジトリの `LICENSE` を参照してください。
 
 ## Acknowledgements
 
