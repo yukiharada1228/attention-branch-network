@@ -7,22 +7,27 @@ class ResNetABN(ResNet):
     def __init__(self, block=BasicBlock, layers=(2, 2, 2, 2), num_classes=10):
         super().__init__(block, layers, num_classes=num_classes)
 
-        feat_channels = self.layer3[0].conv1.in_channels
+        feat_channels = 256 * block.expansion
 
-        self.att_norm = nn.BatchNorm2d(feat_channels)
-        self.att_head = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.Conv2d(feat_channels, num_classes, kernel_size=1, bias=False),
-            nn.BatchNorm2d(num_classes),
-            nn.ReLU(inplace=True),
+        # att_layer4を作成（stride=1）
+        self.inplanes = feat_channels
+        self.att_layer4 = self._make_layer(block, 512, layers[3], stride=1)
+
+        # Attention branch
+        self.att_norm = nn.BatchNorm2d(512 * block.expansion)
+        self.att_conv = nn.Conv2d(
+            512 * block.expansion, num_classes, kernel_size=1, bias=False
         )
+        self.att_norm2 = nn.BatchNorm2d(num_classes)
+        self.att_conv2 = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
+        self.att_conv3 = nn.Conv2d(num_classes, 1, kernel_size=3, padding=1, bias=False)
+        self.att_norm3 = nn.BatchNorm2d(1)
         self.att_logits_pool = nn.AdaptiveAvgPool2d(1)
-        self.att_map_head = nn.Sequential(
-            nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False),
-            nn.Conv2d(num_classes, 1, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(1),
-            nn.Sigmoid(),
-        )
+
+        # layer4を再構築（stride=2）
+        del self.layer4
+        self.inplanes = feat_channels
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         self.attention_map = None
 
@@ -34,16 +39,24 @@ class ResNetABN(ResNet):
 
         x = self.layer1(x)
         x = self.layer2(x)
+        x = self.layer3(x)
 
-        a = self.att_norm(x)
-        a = self.att_head(a)
-        att_logits = self.att_logits_pool(a).flatten(1)
+        # Attention branch
+        a = self.att_layer4(x)
+        a = self.att_norm(a)
+        a = self.att_conv(a)
+        a = self.relu(self.att_norm2(a))
 
-        att_map = self.att_map_head(a)
+        # Attention map
+        att_map = torch.sigmoid(self.att_norm3(self.att_conv3(a)))
         self.attention_map = att_map
 
+        # Attention logits
+        a = self.att_conv2(a)
+        att_logits = self.att_logits_pool(a).flatten(1)
+
+        # Perception branch
         rx = x * att_map + x
-        rx = self.layer3(rx)
         rx = self.layer4(rx)
         rx = self.avgpool(rx)
         rx = torch.flatten(rx, 1)
