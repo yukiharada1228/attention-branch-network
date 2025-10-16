@@ -114,7 +114,7 @@ def main(args):
         greater_is_better=True,
         save_total_limit=3,
         remove_unused_columns=False,
-        report_to=[],
+        report_to=["tensorboard"],
     )
 
     # Optimizer and step LR schedule to match epoch milestones
