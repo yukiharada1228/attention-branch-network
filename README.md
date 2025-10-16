@@ -36,7 +36,7 @@ attention-branch-network/
 ## 動作環境
 
 - Python 3.12 以上
-- CUDA 環境（任意。CPU でも動作）
+- CUDA 環境
 
 ## セットアップ
 
