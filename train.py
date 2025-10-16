@@ -91,16 +91,7 @@ def main(args):
         torch.cuda.manual_seed_all(args.manualSeed)
     torch.backends.cudnn.benchmark = True
 
-    # PlantVillage dataset has 15 classes
-    num_classes = 15
-    base_model = build_from_arch(args.arch, num_classes=num_classes)
-
-    model = ABNForImageClassification(base_model)
-    model.config = ABNConfig(
-        arch=args.arch, dataset=args.dataset, num_labels=num_classes
-    )
-
-    # Transforms for PlantVillage dataset (224x224 images) - ImageNet style
+    # 画像前処理（ImageNet 標準統計）
     transform_train = transforms.Compose(
         [
             transforms.RandomResizedCrop(224),
@@ -118,28 +109,30 @@ def main(args):
         ]
     )
 
-    # Load PlantVillage dataset
-    if args.dataset == "plantvillage":
-        # Use the PlantVillage directory structure
-        data_dir = "./data/PlantVillage"
-        # Create two dataset views with different transforms
-        full_train = datasets.ImageFolder(root=data_dir, transform=transform_train)
-        full_test = datasets.ImageFolder(root=data_dir, transform=transform_test)
+    # Imagenette 専用（10クラス、公式の train/val split を使用）
+    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
+    num_classes = 10
+    train_data = datasets.Imagenette(
+        root=args.imagenette_root,
+        split="train",
+        size=args.imagenette_size,
+        download=True,
+        transform=transform_train,
+    )
+    test_data = datasets.Imagenette(
+        root=args.imagenette_root,
+        split="val",
+        size=args.imagenette_size,
+        download=True,
+        transform=transform_test,
+    )
 
-        # Split indices with 80/20 using the provided seed for reproducibility
-        num_samples = len(full_train)
-        split_idx = int(num_samples * 0.8)
-        g = torch.Generator()
-        g.manual_seed(args.manualSeed)
-        perm = torch.randperm(num_samples, generator=g).tolist()
-        train_indices = perm[:split_idx]
-        test_indices = perm[split_idx:]
-
-        # Build Subset datasets so that transforms differ between train/eval
-        train_data = torch.utils.data.Subset(full_train, train_indices)
-        test_data = torch.utils.data.Subset(full_test, test_indices)
-    else:
-        raise ValueError("Dataset can only be plantvillage.")
+    # Build model with dataset-specific number of classes
+    base_model = build_from_arch(args.arch, num_classes=num_classes)
+    model = ABNForImageClassification(base_model)
+    model.config = ABNConfig(
+        arch=args.arch, dataset="imagenette", num_labels=num_classes
+    )
 
     data_collator = DataCollatorImageClassification()
 
@@ -219,8 +212,20 @@ def main(args):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    # Datasets
-    p.add_argument("-d", "--dataset", default="plantvillage", type=str)
+    # Dataset (Imagenette 専用)
+    p.add_argument(
+        "--imagenette-size",
+        default="full",
+        type=str,
+        choices=["full", "320px", "160px"],
+        help="Imagenette のサイズバリアント",
+    )
+    p.add_argument(
+        "--imagenette-root",
+        default="./data/Imagenette",
+        type=str,
+        help="Imagenette のルートディレクトリ",
+    )
     p.add_argument(
         "-j",
         "--workers",

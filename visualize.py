@@ -160,8 +160,11 @@ def main(args):
             normalized_state = None
             inferred_num_classes = None
 
-    # dataset and classes (PlantVillage 15 クラスに整合; ckptから推定があれば優先)
-    num_classes = inferred_num_classes if inferred_num_classes is not None else 15
+    # クラス数（ckptから推定がなければ Imagenette=10 を既定）
+    if inferred_num_classes is not None:
+        num_classes = inferred_num_classes
+    else:
+        num_classes = 10
 
     # model (train.py と同等のビルド)
     model = build_from_arch(args.arch, num_classes=num_classes).to(device)
@@ -174,7 +177,7 @@ def main(args):
         _load_weights_into_base_model(model, args.ckpt, device)
     model.eval()
 
-    # PlantVillage 可視化用の評価変換 (train.py に準拠)
+    # 評価用の変換 (train.py に準拠)
     transform_test = transforms.Compose(
         [
             transforms.Resize(256),
@@ -183,10 +186,15 @@ def main(args):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
-    if args.dataset != "plantvillage":
-        raise ValueError("Dataset can only be plantvillage.")
-    data_dir = "./data/PlantVillage"
-    test_data = datasets.ImageFolder(root=data_dir, transform=transform_test)
+    # Imagenette val split を利用
+    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
+    test_data = datasets.Imagenette(
+        root=args.imagenette_root,
+        split="val",
+        size=args.imagenette_size,
+        download=True,
+        transform=transform_test,
+    )
 
     loader = torch.utils.data.DataLoader(
         test_data, batch_size=args.test_batch, shuffle=True, num_workers=args.workers
@@ -287,8 +295,20 @@ def main(args):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    # Dataset to align with train script
-    p.add_argument("-d", "--dataset", default="plantvillage", type=str)
+    # Dataset (Imagenette 専用)
+    p.add_argument(
+        "--imagenette-size",
+        default="full",
+        type=str,
+        choices=["full", "320px", "160px"],
+        help="Imagenette のサイズバリアント",
+    )
+    p.add_argument(
+        "--imagenette-root",
+        default="./data/Imagenette",
+        type=str,
+        help="Imagenette のルートディレクトリ",
+    )
     p.add_argument(
         "-j",
         "--workers",
@@ -317,7 +337,10 @@ def parse_args():
     )
     # Checkpoint path aligned with train default
     p.add_argument(
-        "--ckpt", type=str, default="checkpoint/model.safetensors", help="checkpoint dir or model.safetensors path"
+        "--ckpt",
+        type=str,
+        default="checkpoint/model.safetensors",
+        help="checkpoint dir or model.safetensors path",
     )
     # Visualization layout and saving
     p.add_argument("--cols", type=int, default=8)
