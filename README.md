@@ -91,7 +91,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 
 ## 可視化結果・アルゴリズム
 
-- `outputs/abn_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します（クラス数に応じて できるだけ正方形に）。
+- `outputs/abn_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します。
 
 ![Attention Maps](outputs/abn_attentions.png?v=1)
 
