@@ -120,7 +120,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 実装の要点（ABN 論文実装に準拠しつつ簡潔・高速化）:
 
 1. 画像復元: ImageNet 統計での正規化を反転し、RGB→BGR に変換
-2. アテンション: `attention[0]` を min-max 正規化して入力解像度へ `cv2.resize`
+2. アテンション: `attention[0]` を 入力解像度へ `cv2.resize`
 3. カラーマップ: `cv2.COLORMAP_JET` を適用
 4. 合成: `cv2.add(original_bgr, jet_map)`。`--attention-alpha` で強度調整（1.0 で単純加算）
 5. レイアウト: 各クラスから1枚ずつ抽出し、左に原画像・右に重畳画像のペアをタイル配置
