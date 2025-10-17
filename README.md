@@ -2,7 +2,7 @@
 
 Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagenette`（10クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
-![Attention Maps](outputs/abn_attentions.png)
+![Attention Maps](outputs/abn_attentions.png?v=1)
 
 ## 概要
 
