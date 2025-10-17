@@ -2,6 +2,8 @@
 
 Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagenette`（10クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
+![Attention Maps](outputs/abn_attentions.png)
+
 ## 概要
 
 このプロジェクトは ABN を ResNet 系バックボーン上に実装し、Imagenette データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
@@ -105,8 +107,6 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 ## 可視化結果・アルゴリズム
 
 - `outputs/{prefix}_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します（既定: `abn_attentions.png`）。
-
-![Attention Maps](outputs/abn_attentions.png)
 
 実装の要点（ABN 論文実装に準拠しつつ簡潔・高速化）:
 
