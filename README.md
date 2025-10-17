@@ -9,7 +9,7 @@ Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagene
 ## 主な機能
 
 - **Imagenette 10クラス分類**: 公式の `train/val` 分割をそのまま利用
-- **注意機構の可視化**: 注意マップをヒートマップ重畳で保存
+- **注意機構の可視化**: 原画像とヒートマップ重畳を横並びペアでグリッド保存（クラス数に合わせて正方に近いレイアウト。例: 10クラス → 2×5 ペア）
 - **複数の ResNet 対応**: ResNet18/34/50/101/152
 - **Trainer 連携**: 最良モデルの自動保存・読み込みに対応
 - **チェックポイント互換**: `model.safetensors` と `checkpoint-XXXX` のどちらからでも可視化可能
@@ -23,9 +23,8 @@ attention-branch-network/
 ├── data/                  # データセット（初回実行時に自動ダウンロード）
 │   └── Imagenette/
 ├── checkpoint/            # Trainer 出力（最良モデルや epoch ごとの ckpt）
-├── outputs/               # 可視化結果（PNG）
-│   ├── abn_attentions.png
-│   └── abn_inputs.png
+├── outputs/               # 可視化結果（まとめ画像）
+│   └── abn_attentions.png
 ├── train.py               # 学習・評価（HF Trainer）
 ├── visualize.py           # 注意マップ可視化
 ├── main.py                # エントリ（サンプル）
@@ -90,15 +89,20 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 - `--gpu-id` または `--cpu`（可視化のみ）
 - `--checkpoint`（学習の出力先）/`--ckpt`（可視化の入力元）
 
-## 可視化結果
+## 可視化結果・アルゴリズム
 
-`outputs/` には以下の画像が保存されます。
+- `outputs/abn_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します（クラス数に応じて できるだけ正方形に）。
 
-### 入力画像
-![Input Images](outputs/abn_inputs.png)
-
-### 注意マップ
 ![Attention Maps](outputs/abn_attentions.png)
+
+可視化アルゴリズムは ABN オリジナル実装に完全準拠です。
+
+1. 画像復元: `v_img = ((img^T + 0.5 + mean) * std) * 256` → BGR
+2. アテンション: `resize(att[0], (W,H)) * 255`
+3. 一時 PNG 経由で読み直し: `stock1.png`, `stock2.png`
+4. カラーマップ: `cv2.COLORMAP_JET`
+5. 合成: `cv2.add(v_img, jet_map)`
+6. `stock1.png`, `stock2.png` は合成後に削除
 
 ## 対応アーキテクチャ
 
