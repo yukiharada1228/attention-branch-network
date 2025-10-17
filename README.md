@@ -8,6 +8,15 @@ Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagene
 
 このプロジェクトは ABN を ResNet 系バックボーン上に実装し、Imagenette データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
 
+## 訓練結果
+
+ResNet152 + ABN での Imagenette 10クラス分類の結果:
+
+- **Top-1 Accuracy**: 90.47%
+- **Top-5 Accuracy**: 99.21%
+- **Validation Loss**: 0.6205
+- **Training Epochs**: 90 epochs
+
 ## 主な機能
 
 - **Imagenette 10クラス分類**: 公式の `train/val` 分割をそのまま利用
