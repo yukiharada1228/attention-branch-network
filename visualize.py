@@ -13,6 +13,50 @@ import torchvision.transforms as transforms
 from models import ABNForImageClassification
 
 
+def min_max(x, axis=None):
+    x_min = x.min(axis=axis, keepdims=True)
+    x_max = x.max(axis=axis, keepdims=True)
+    return (x - x_min) / (x_max - x_min)
+
+
+def denormalize_image(img_tensor, mean, std):
+    """正規化された画像を元に戻す"""
+    img = img_tensor.cpu().numpy().transpose((1, 2, 0))
+    img = img * np.array(std) + np.array(mean)
+    img = np.clip(img * 255.0, 0, 255).astype(np.uint8)
+    return img
+
+
+def apply_attention_overlay(image, attention_map, alpha=0.5):
+    """アテンションマップを画像に重畳
+    
+    Args:
+        image: 元画像 (BGR)
+        attention_map: アテンションマップ (H, W)
+        alpha: アテンションの強度 (0.0-1.0), デフォルト0.5
+    """
+    h, w = image.shape[:2]
+    # アテンションマップをリサイズ
+    att_resized = cv2.resize(attention_map, (w, h))
+    # 0-255にスケール
+    att_scaled = (att_resized * 255.0).astype(np.uint8)
+    # JETカラーマップを適用
+    jet_map = cv2.applyColorMap(att_scaled, cv2.COLORMAP_JET)
+    
+    # アテンションを強調するため、元のコードと同様に加算方式を使用
+    # alpha=1.0で元のコードと完全一致（単純加算）
+    # alpha<1.0でアテンションを減衰可能
+    if alpha >= 1.0:
+        # 元のコードと同じ単純加算
+        overlay = cv2.add(image, jet_map)
+    else:
+        # アテンション強度を調整可能に
+        jet_map_scaled = (jet_map * alpha).astype(np.uint8)
+        overlay = cv2.add(image, jet_map_scaled)
+    
+    return overlay
+
+
 def main(args):
     if args.gpu_id:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -21,14 +65,14 @@ def main(args):
         "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     )
 
-    # from_pretrained で学習済みモデルを読み込み
+    # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
     model_wrapper = ABNForImageClassification.from_pretrained(
         args.ckpt, arch=args.arch, map_location=device, strict=False
     )
     model_wrapper.eval()
 
-    # 評価用の変換 (train.py に準拠)
+    # 評価用の変換
     transform_test = transforms.Compose(
         [
             transforms.Resize(256),
@@ -37,8 +81,8 @@ def main(args):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
+    
     # Imagenette val split を利用
-    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
     test_data = datasets.Imagenette(
         root=args.imagenette_root,
         split="val",
@@ -52,158 +96,140 @@ def main(args):
     )
 
     idx_to_cls = list(getattr(test_data, "classes", []))
+    num_classes = len(idx_to_cls) if idx_to_cls else 10
     softmax = nn.Softmax(dim=1)
 
+    print(f"データセットから各クラス1枚ずつ（計{num_classes}枚）を収集中...")
+
     with torch.no_grad():
-        # 各クラスごとに一枚ずつ表示するために、クラスごとに画像を収集
-        classes_list = list(idx_to_cls) if idx_to_cls else []
-        num_classes = len(classes_list) if classes_list else 10
+        # 各クラスから一枚ずつ画像を収集
+        class_data = {}
 
-        # 各クラスから一枚ずつ画像を取得
-        class_images = {}
-        class_labels = {}
-        class_attentions = {}
-        class_predictions = {}
-        class_confidences = {}
-
-        # データローダーから各クラスの最初の画像を収集
         for images, labels in loader:
             images = images.to(device)
             labels = labels.to(device)
 
-            # ABN のアテンションは base_model 側の forward 出力を利用
+            # ABN のアテンションを取得
             _, outputs, attention = model_wrapper.base_model(images)
-            outputs = softmax(outputs)
-            conf_data = outputs.data.topk(k=1, dim=1, largest=True, sorted=True)
-            _, predicted = outputs.max(1)
+            probs = softmax(outputs)
+            confidences, predicted = probs.max(1)
 
             # 各クラスの最初の画像を1つずつ収集
-            for i, (img, label) in enumerate(zip(images, labels)):
+            for i, label in enumerate(labels):
                 cls_idx = label.item()
-                if cls_idx not in class_images:
-                    class_images[cls_idx] = img
-                    class_labels[cls_idx] = label
-                    class_attentions[cls_idx] = attention[i]
-                    class_predictions[cls_idx] = predicted[i]
-                    class_confidences[cls_idx] = conf_data[0][i]
+                if cls_idx not in class_data:
+                    class_data[cls_idx] = {
+                        'image': images[i],
+                        'attention': attention[i],
+                        'predicted': predicted[i].item(),
+                        'confidence': confidences[i].item(),
+                        'label': cls_idx
+                    }
 
-                    # 全てのクラスを収集したら終了
-                    if len(class_images) >= num_classes:
+                    # 全クラス収集完了
+                    if len(class_data) >= num_classes:
                         break
 
-            if len(class_images) >= num_classes:
+            if len(class_data) >= num_classes:
                 break
 
-        # 可視化用のデータを準備
-        v_list = []
-        att_list = []
-        label_list = []
-        pred_list = []
-        conf_list = []
+    print(f"{len(class_data)}クラスのデータを収集完了")
 
-        # 可視化アルゴリズムは元スクリプトと完全一致で固定（正規化やカラーマップは変更不可）
+    # 正規化パラメータ
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
 
-        count = 0
-        for cls_idx in sorted(class_images.keys()):
-            img = class_images[cls_idx]
-            att = class_attentions[cls_idx]
-            pred = class_predictions[cls_idx]
-            conf = class_confidences[cls_idx]
+    # 可視化データを準備
+    vis_data = []
+    for cls_idx in sorted(class_data.keys()):
+        data = class_data[cls_idx]
+        
+        # 画像の前処理（BGR形式に変換）
+        img_rgb = denormalize_image(data['image'], mean, std)
+        img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        
+        # アテンションマップを重畳
+        att_map = data['attention'].cpu().numpy()[0]
+        att_map = min_max(att_map)
+        overlay = apply_attention_overlay(img_bgr, att_map, alpha=args.attention_alpha)
+        
+        # クラス名を取得
+        true_label = idx_to_cls[data['label']] if idx_to_cls else f"Class {data['label']}"
+        pred_label = idx_to_cls[data['predicted']] if idx_to_cls else f"Class {data['predicted']}"
+        
+        vis_data.append({
+            'original': img_bgr,
+            'overlay': overlay,
+            'true_label': true_label,
+            'pred_label': pred_label,
+            'confidence': data['confidence'],
+            'correct': data['label'] == data['predicted']
+        })
 
-            # 画像の前処理
-            d_input = img.data.cpu().numpy()
-            # 元コードと同一式で再現（BGR）
-            v_img = (
-                (
-                    d_input.transpose((1, 2, 0))
-                    + 0.5
-                    + np.array([0.485, 0.456, 0.406], dtype=np.float32)
-                )
-                * np.array([0.229, 0.224, 0.225], dtype=np.float32)
-            ) * 256.0
-            v_img = v_img[:, :, ::-1]
+    # レイアウトを計算（原画像とアテンションを横並びペアで配置）
+    num_pairs = len(vis_data)
+    sqrt_floor = int(math.floor(math.sqrt(num_pairs)))
+    rows = max(1, sqrt_floor)
+    for r in range(sqrt_floor, 1, -1):
+        if num_pairs % r == 0:
+            rows = r
+            break
+    pair_cols = int(math.ceil(num_pairs / rows))
+    total_cols = pair_cols * 2
 
-            # アテンションマップの前処理
-            c_att = att.data.cpu().numpy()
-            in_c, in_y, in_x = img.shape
-            resize_att = cv2.resize(c_att[0], (in_x, in_y))
-            # 元コードと同じ手順: 0-255 スケール、PNG 経由、JET、単純加算
-            resize_att = resize_att * 255.0
-            # imwrite の警告回避のため uint8 へ明示変換
-            v_img_u8 = np.clip(v_img, 0, 255).astype(np.uint8)
-            att_u8 = np.clip(resize_att, 0, 255).astype(np.uint8)
-            cv2.imwrite("stock1.png", v_img_u8)
-            cv2.imwrite("stock2.png", att_u8)
-            v_img_disk = cv2.imread("stock1.png")
-            vis_map = cv2.imread("stock2.png", 0)
-            jet_map = cv2.applyColorMap(vis_map, cv2.COLORMAP_JET)
-            jet_map = cv2.add(v_img_disk, jet_map)
-            v_img = v_img_disk
-            # 一時ファイル削除
-            os.remove("stock1.png")
-            os.remove("stock2.png")
+    # 図のサイズ設定
+    fig_w = total_cols * 3
+    fig_h = rows * 3.5
 
-            v_list.append(v_img)
-            att_list.append(jet_map)
-            label_list.append(cls_idx)
-            pred_list.append(pred.item())
-            conf_list.append(conf.item())
+    print(f"レイアウト: {rows}行 × {pair_cols}ペア（計{total_cols}列）で配置")
 
-        # 表示用のレイアウト（原画像とアテンションを横並びペアで配置）
-        # クラス数（=ペア数）に合わせ、できるだけ正方形かつ割り切れるなら綺麗な分割に
-        # 例: 10 -> 2x5、12 -> 3x4、15 -> 3x5
-        num_pairs = len(v_list)
-        sqrt_floor = int(math.floor(math.sqrt(num_pairs)))
-        rows = max(1, sqrt_floor)
-        for r in range(sqrt_floor, 1, -1):
-            if num_pairs % r == 0:
-                rows = r
-                break
-        pair_cols = int(math.ceil(num_pairs / rows))
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=args.dpi)
 
-        # 図全体は 2*pair_cols 列（各ペアが2カラム占有）
-        total_cols = pair_cols * 2
-        fig_w = total_cols * 2  # 各セルを横2インチ程度で
-        fig_h = rows * 2  # 各行を縦2インチ程度で
+    for i, data in enumerate(vis_data):
+        r = i // pair_cols
+        c_pair = i % pair_cols
+        
+        # 左: 原画像
+        ax_left = fig.add_subplot(rows, total_cols, r * total_cols + c_pair * 2 + 1)
+        ax_left.imshow(cv2.cvtColor(data['original'], cv2.COLOR_BGR2RGB))
+        ax_left.set_axis_off()
+        ax_left.set_title(f"True: {data['true_label']}", fontsize=8, pad=2)
+        
+        # 右: アテンション重畳画像
+        ax_right = fig.add_subplot(rows, total_cols, r * total_cols + c_pair * 2 + 2)
+        ax_right.imshow(cv2.cvtColor(data['overlay'], cv2.COLOR_BGR2RGB))
+        ax_right.set_axis_off()
+        
+        # 予測結果を色分けして表示
+        color = 'green' if data['correct'] else 'red'
+        title = f"Pred: {data['pred_label']}\n({data['confidence']:.2%})"
+        ax_right.set_title(title, fontsize=8, pad=2, color=color)
 
-        fig_pairs = plt.figure(figsize=(fig_w, fig_h), dpi=args.dpi)
-        plt.axis("off")
+    plt.tight_layout(pad=0.3)
 
-        for i, (v_img, att_img) in enumerate(zip(v_list, att_list)):
-            r = i // pair_cols
-            c_pair = i % pair_cols
-            # 左: 原画像
-            ax_left = fig_pairs.add_subplot(
-                rows, total_cols, r * total_cols + c_pair * 2 + 1
-            )
-            ax_left.imshow(cv2.cvtColor(v_img, cv2.COLOR_BGR2RGB))
-            ax_left.set_axis_off()
-            # 右: 重畳ヒートマップ
-            ax_right = fig_pairs.add_subplot(
-                rows, total_cols, r * total_cols + c_pair * 2 + 2
-            )
-            ax_right.imshow(cv2.cvtColor(att_img, cv2.COLOR_BGR2RGB))
-            ax_right.set_axis_off()
+    # 保存
+    output_path = os.path.join(args.out_dir, f"{args.prefix}_attentions.png")
+    fig.savefig(output_path, dpi=args.dpi, bbox_inches="tight", pad_inches=0.1)
+    print(f"可視化結果を保存: {output_path}")
 
-        plt.tight_layout(pad=0.05)
+    # 精度を計算して表示
+    correct = sum(1 for d in vis_data if d['correct'])
+    accuracy = correct / len(vis_data) * 100
+    print(f"表示サンプルの精度: {correct}/{len(vis_data)} ({accuracy:.1f}%)")
 
-        # 1枚の画像として保存（例示のレイアウトに合わせた出力名）
-        fig_pairs.savefig(
-            os.path.join(args.out_dir, f"{args.prefix}_attentions.png"),
-            dpi=args.dpi,
-            bbox_inches="tight",
-            pad_inches=0.05,
-        )
-
+    if not args.no_display:
         try:
             plt.show()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"表示エラー: {e}")
+
+    plt.close()
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    # Dataset (Imagenette 専用)
+    p = argparse.ArgumentParser(description="ABNモデルのアテンション可視化")
+    
+    # Dataset
     p.add_argument(
         "--imagenette-size",
         default="full",
@@ -223,43 +249,71 @@ def parse_args():
         default=4,
         type=int,
         metavar="N",
-        help="number of data loading workers (default: 4)",
+        help="データローダーのワーカー数 (default: 4)",
     )
-    # Batch size naming aligned to train (--test-batch); keep --batch-size as alias
     p.add_argument(
-        "--test-batch", "--batch-size", dest="test_batch", default=100, type=int
+        "--test-batch",
+        default=100,
+        type=int,
+        help="テストバッチサイズ (default: 100)",
     )
-    # Device options
-    p.add_argument("--cpu", action="store_true")
+    
+    # Device
+    p.add_argument("--cpu", action="store_true", help="CPUを強制使用")
     p.add_argument(
-        "--gpu-id", default="0", type=str, help="id(s) for CUDA_VISIBLE_DEVICES"
+        "--gpu-id", 
+        default="0", 
+        type=str, 
+        help="CUDA_VISIBLE_DEVICES (default: 0)"
     )
-    # Architecture
+    
+    # Model
     p.add_argument(
         "--arch",
         "-a",
         metavar="ARCH",
         default="resnet152",
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
-        help="model architecture",
+        help="モデルアーキテクチャ (default: resnet152)",
     )
-    # Checkpoint path aligned with train default
     p.add_argument(
         "--ckpt",
         type=str,
         default="checkpoint/model.safetensors",
-        help="checkpoint dir or model.safetensors path",
+        help="チェックポイントパス (default: checkpoint/model.safetensors)",
     )
-    # Visualization layout and saving
-    p.add_argument("--cols", type=int, default=8)
-    p.add_argument("--rows", type=int, default=2)
+    
+    # Output
     p.add_argument(
-        "--out-dir", type=str, default="outputs", help="directory to save figures"
+        "--out-dir", 
+        type=str, 
+        default="outputs", 
+        help="出力ディレクトリ (default: outputs)"
     )
     p.add_argument(
-        "--prefix", type=str, default="abn", help="filename prefix for saved figures"
+        "--prefix", 
+        type=str, 
+        default="abn", 
+        help="出力ファイル名のプレフィックス (default: abn)"
     )
-    p.add_argument("--dpi", type=int, default=200, help="figure DPI when saving")
+    p.add_argument(
+        "--dpi", 
+        type=int, 
+        default=200, 
+        help="保存時のDPI (default: 200)"
+    )
+    p.add_argument(
+        "--attention-alpha",
+        type=float,
+        default=1.0,
+        help="アテンション強度 (0.0-1.0, 1.0=最大強度・元のコードと同じ, default: 1.0)"
+    )
+    p.add_argument(
+        "--no-display",
+        action="store_true",
+        help="画像を表示せずに保存のみ実行"
+    )
+    
     return p.parse_args()
 
 

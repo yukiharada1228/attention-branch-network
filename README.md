@@ -93,7 +93,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 
 - `outputs/abn_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します。
 
-![Attention Maps](outputs/abn_attentions.png?v=1)
+![Attention Maps](outputs/abn_attentions.png)
 
 可視化アルゴリズムは ABN オリジナル実装に完全準拠です。
 
