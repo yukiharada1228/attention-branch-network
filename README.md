@@ -19,10 +19,13 @@ Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagene
 ```
 attention-branch-network/
 ├── models/                 # ABN モデル実装
+│   ├── __init__.py
+│   ├── abn.py
 │   └── resnet_abn.py
 ├── data/                  # データセット（初回実行時に自動ダウンロード）
 │   └── Imagenette/
 ├── checkpoint/            # Trainer 出力（最良モデルや epoch ごとの ckpt）
+│   └── runs/              # TensorBoard 互換ログ
 ├── outputs/               # 可視化結果（まとめ画像）
 │   └── abn_attentions.png
 ├── train.py               # 学習・評価（HF Trainer）
@@ -61,6 +64,7 @@ uv run train.py
 
 - 最良モデルは `--checkpoint` で指定したディレクトリに保存されます（例: `checkpoint/model.safetensors`）。
 - 学習途中のチェックポイントは `checkpoint-XXXX/` 形式で保存されます。
+- ログ: TensorBoard 互換のイベントファイルを `checkpoint/runs/` に出力します。
 
 #### 評価のみ
 
@@ -80,29 +84,38 @@ uv run visualize.py --ckpt checkpoint/model.safetensors --out-dir outputs --pref
 uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix abn
 ```
 
-主なオプション（学習/可視化）:
+主なオプション:
 
-- `--arch {resnet18,resnet34,resnet50,resnet101,resnet152}`（既定: `resnet152`）
-- `--imagenette-root`（既定: `./data/Imagenette`）
-- `--imagenette-size {full|320px|160px}`
-- `-j/--workers` DataLoader ワーカ数（既定: 4）
-- `--gpu-id` または `--cpu`（可視化のみ）
-- `--checkpoint`（学習の出力先）/`--ckpt`（可視化の入力元）
+- 学習（train.py）
+  - `--arch {resnet18,resnet34,resnet50,resnet101,resnet152}`（既定: `resnet152`）
+  - `--imagenette-root`（既定: `./data/Imagenette`） / `--imagenette-size {full|320px|160px}`（既定: `full`）
+  - `-j/--workers`（既定: 4）
+  - `--train-batch`（既定: 64）/`--test-batch`（既定: 100）
+  - `--epochs`（既定: 90）/`--lr`（既定: 0.1）/`--momentum`（既定: 0.9）/`--wd`（既定: 1e-4）
+  - `--schedule`（既定: `31 61`）/`--gamma`（既定: 0.1）
+  - `--checkpoint`（出力先、既定: `checkpoint`）/`--resume`（学習再開）
+  - `--evaluate`（評価のみ）/`--gpu-id`（CUDA デバイス指定）/`--push-to-hub`（任意）
+
+- 可視化（visualize.py）
+  - `--ckpt`（既定: `checkpoint/model.safetensors`。`checkpoint-XXXX/` も可）
+  - `--out-dir`（既定: `outputs`）/`--prefix`（既定: `abn`）/`--dpi`（既定: 200）
+  - `--attention-alpha`（0.0–1.0、既定: 1.0。1.0で単純加算）/`--no-display`
+  - `--arch` / `--imagenette-root` / `--imagenette-size` / `-j/--workers` / `--gpu-id` または `--cpu`
 
 ## 可視化結果・アルゴリズム
 
-- `outputs/abn_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します。
+- `outputs/{prefix}_attentions.png` に、原画像と重畳ヒートマップのペアをタイル配置で保存します（既定: `abn_attentions.png`）。
 
 ![Attention Maps](outputs/abn_attentions.png)
 
-可視化アルゴリズムは ABN オリジナル実装に完全準拠です。
+実装の要点（ABN 論文実装に準拠しつつ簡潔・高速化）:
 
-1. 画像復元: `v_img = ((img^T + 0.5 + mean) * std) * 256` → BGR
-2. アテンション: `resize(att[0], (W,H)) * 255`
-3. 一時 PNG 経由で読み直し: `stock1.png`, `stock2.png`
-4. カラーマップ: `cv2.COLORMAP_JET`
-5. 合成: `cv2.add(v_img, jet_map)`
-6. `stock1.png`, `stock2.png` は合成後に削除
+1. 画像復元: ImageNet 統計での正規化を反転し、RGB→BGR に変換
+2. アテンション: `attention[0]` を min-max 正規化して入力解像度へ `cv2.resize`
+3. カラーマップ: `cv2.COLORMAP_JET` を適用
+4. 合成: `cv2.add(original_bgr, jet_map)`。`--attention-alpha` で強度調整（1.0 で単純加算）
+5. レイアウト: 各クラスから1枚ずつ抽出し、左に原画像・右に重畳画像のペアをタイル配置
+6. 表示: 既定で表示、`--no-display` で保存のみ
 
 ## 対応アーキテクチャ
 
@@ -119,7 +132,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 - NumPy
 - Matplotlib（可視化）
 - OpenCV（画像処理）
-- safetensors（チェックポイント読込に使用）
+- TensorBoardX（ログ出力）
 
 ## ライセンス
 
