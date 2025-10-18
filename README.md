@@ -17,6 +17,56 @@ ResNet152 + ABN での Imagenette 10クラス分類の結果:
 - **Validation Loss**: 0.6205
 - **Training Epochs**: 90 epochs
 
+## 学習済みモデル
+
+このプロジェクトで学習したモデルがHugging Face Hubで公開されています：
+
+**🔗 [yukiharada1228/abn-resnet152-imagenette](https://huggingface.co/yukiharada1228/abn-resnet152-imagenette)**
+
+### モデル仕様
+- **アーキテクチャ**: ResNet152 + Attention Branch Network
+- **データセット**: Imagenette (10クラス)
+- **性能**: Top-1 Accuracy 90.47%, Top-5 Accuracy 99.21%
+- **モデルサイズ**: 73.3M parameters
+- **フォーマット**: Safetensors
+
+### 使用方法
+
+```python
+from transformers import AutoModelForImageClassification
+import torchvision.transforms as T
+import torch
+
+# モデルの読み込み
+model = AutoModelForImageClassification.from_pretrained(
+    "yukiharada1228/abn-resnet152-imagenette",
+    trust_remote_code=True,
+)
+model.eval()
+
+# 前処理
+transform = T.Compose([
+    T.Resize(256),
+    T.CenterCrop(224),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+# 推論
+with torch.no_grad():
+    outputs = model(pixel_values=pixel_values)
+    logits = outputs.logits
+    attention_map = model.model.attention_map  # (B,1,H,W)
+```
+
+### 可視化
+
+学習済みモデルを使用した可視化：
+
+```bash
+uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette --out-dir outputs --prefix abn
+```
+
 ## 主な機能
 
 - **Imagenette 10クラス分類**: 公式の `train/val` 分割をそのまま利用
