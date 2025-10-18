@@ -104,10 +104,9 @@ def main(args):
             images = images.to(device)
             labels = labels.to(device)
 
-            # ABN のアテンションを取得（abn_model の forward では logits のみ返すため attention は内部から取得）
-            # 注意: attention 可視化のために backbone の attention_map を参照
+            # ABNでは forward は logits のみのため、アテンションは内部に保存されたマップから取得する
+            # 可視化には model.model.attention_map に保存されたアテンションマップを用いる
             outputs = model(pixel_values=images)["logits"]
-            # abn_model では self.model.attention_map に保存される
             attention = model.model.attention_map
             probs = softmax(outputs)
             confidences, predicted = probs.max(1)

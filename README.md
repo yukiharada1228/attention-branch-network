@@ -29,10 +29,11 @@ ResNet152 + ABN での Imagenette 10クラス分類の結果:
 
 ```
 attention-branch-network/
-├── models/                 # ABN モデル実装
+├── models/                 # ABN モデル実装（HF互換）
 │   ├── __init__.py
-│   ├── abn.py
-│   └── resnet_abn.py
+│   ├── configuration_abn.py
+│   ├── modeling_abn.py
+│   └── resnet_abn_backbone.py
 ├── data/                  # データセット（初回実行時に自動ダウンロード）
 │   └── Imagenette/
 ├── checkpoint/            # Trainer 出力（最良モデルや epoch ごとの ckpt）
@@ -49,7 +50,7 @@ attention-branch-network/
 ## 動作環境
 
 - Python 3.12 以上
-- CUDA 環境
+- CUDA 環境（GPU 推奨。`--cpu` でCPU実行可）
 
 ## セットアップ
 
@@ -142,6 +143,8 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 - Matplotlib（可視化）
 - OpenCV（画像処理）
 - TensorBoardX（ログ出力）
+
+`pyproject.toml` に定義済みです。`uv sync` で環境構築できます。
 
 ## ライセンス
 
