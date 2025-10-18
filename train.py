@@ -5,12 +5,12 @@ import random
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from transformers import Trainer, TrainingArguments
 
-from models import ABNForImageClassification, build_from_arch
+from models import (AbnConfig, AbnModelForImageClassification,
+                    register_for_auto_class)
 
 
 class DataCollatorImageClassification:
@@ -88,13 +88,32 @@ def main(args):
         transform=transform_test,
     )
 
+    # 学習/評価用モデル準備（Hugging Face 互換モデルへ移行）
     if args.evaluate:
-        model = ABNForImageClassification.from_pretrained(
-            args.checkpoint, arch=args.arch
+        model = AbnModelForImageClassification.from_pretrained(
+            args.checkpoint, trust_remote_code=True
         )
     else:
-        base_model = build_from_arch(args.arch, num_classes=num_classes)
-        model = ABNForImageClassification(base_model)
+        # AutoClass 情報を埋め込み
+        register_for_auto_class()
+        # データセットからラベルマッピングを1対1で構築（正規名のみ）
+        class_to_idx = getattr(train_data, "class_to_idx", None)
+        if isinstance(class_to_idx, dict) and class_to_idx:
+            # ImageFolder 互換: {label(str): id(int)}
+            label2id = {str(label): int(idx) for label, idx in class_to_idx.items()}
+            id2label = {idx: label for label, idx in label2id.items()}
+        else:
+            # 自動生成（数値ラベル）にフォールバック
+            id2label = None
+            label2id = None
+
+        config = AbnConfig(
+            arch=args.arch,
+            num_labels=num_classes,
+            id2label=id2label if id2label else None,
+            label2id=label2id if label2id else None,
+        )
+        model = AbnModelForImageClassification(config)
 
     data_collator = DataCollatorImageClassification()
 

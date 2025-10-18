@@ -9,8 +9,7 @@ import torch
 import torch.nn as nn
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-
-from models import ABNForImageClassification
+from transformers import AutoModelForImageClassification
 
 
 def denormalize_image(img_tensor, mean, std):
@@ -61,10 +60,12 @@ def main(args):
 
     # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
-    model_wrapper = ABNForImageClassification.from_pretrained(
-        args.ckpt, arch=args.arch, map_location=device, strict=False
+    model = AutoModelForImageClassification.from_pretrained(
+        args.ckpt, trust_remote_code=True
     )
-    model_wrapper.eval()
+    # 入力テンソルと同じデバイスにモデルを移動
+    model.to(device)
+    model.eval()
 
     # 評価用の変換
     transform_test = transforms.Compose(
@@ -103,8 +104,11 @@ def main(args):
             images = images.to(device)
             labels = labels.to(device)
 
-            # ABN のアテンションを取得
-            _, outputs, attention = model_wrapper.base_model(images)
+            # ABN のアテンションを取得（abn_model の forward では logits のみ返すため attention は内部から取得）
+            # 注意: attention 可視化のために backbone の attention_map を参照
+            outputs = model(pixel_values=images)["logits"]
+            # abn_model では self.model.attention_map に保存される
+            attention = model.model.attention_map
             probs = softmax(outputs)
             confidences, predicted = probs.max(1)
 

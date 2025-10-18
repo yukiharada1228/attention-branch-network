@@ -1,15 +1,18 @@
-from .abn import ABNForImageClassification
-from .resnet_abn import (ResNetABN, build_from_arch, resnet18_abn,
-                         resnet34_abn, resnet50_abn, resnet101_abn,
-                         resnet152_abn)
+from .configuration_abn import AbnConfig
+from .modeling_abn import AbnModel, AbnModelForImageClassification
+
+
+# AutoClass 登録ヘルパ（save_pretrained 時に auto_map を埋める）
+def register_for_auto_class():
+    AbnConfig.register_for_auto_class()
+    AbnModel.register_for_auto_class("AutoModel")
+    AbnModelForImageClassification.register_for_auto_class(
+        "AutoModelForImageClassification"
+    )
+
 
 __all__ = [
-    "resnet18_abn",
-    "resnet34_abn",
-    "resnet50_abn",
-    "resnet101_abn",
-    "resnet152_abn",
-    "ResNetABN",
-    "build_from_arch",
-    "ABNForImageClassification",
+    "AbnConfig",
+    "AbnModel",
+    "AbnModelForImageClassification",
 ]
