@@ -87,7 +87,7 @@ def main(args):
     )
 
     loader = torch.utils.data.DataLoader(
-        test_data, batch_size=args.test_batch, shuffle=True, num_workers=args.workers
+        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers
     )
 
     idx_to_cls = list(getattr(test_data, "classes", []))
