@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from datasets import load_dataset
 from transformers import Trainer, TrainingArguments
 
 from models import (AbnConfig, AbnModelForImageClassification,
@@ -91,18 +92,39 @@ def main(args):
         )
     elif args.dataset == "imagenet":
         # ImageNet 2012 Classification Dataset（1000クラス）
-        # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.ImageNet.html
+        # https://huggingface.co/datasets/ILSVRC/imagenet-1k
         num_classes = 1000
-        train_data = datasets.ImageNet(
-            root=args.imagenet_root,
-            split="train",
-            transform=transform_train,
+
+        # Hugging Face datasetsからImageNet-1kを読み込み
+        train_dataset = load_dataset(
+            "ILSVRC/imagenet-1k", split="train", trust_remote_code=True
         )
-        test_data = datasets.ImageNet(
-            root=args.imagenet_root,
-            split="val",
-            transform=transform_test,
+        val_dataset = load_dataset(
+            "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
         )
+
+        # カスタムデータセットクラスを作成
+        class HuggingFaceImageNetDataset:
+            def __init__(self, dataset, transform):
+                self.dataset = dataset
+                self.transform = transform
+
+            def __len__(self):
+                return len(self.dataset)
+
+            def __getitem__(self, idx):
+                item = self.dataset[idx]
+                image = item["image"]
+                label = item["label"]
+
+                # PIL Imageをtensorに変換
+                if self.transform:
+                    image = self.transform(image)
+
+                return image, label
+
+        train_data = HuggingFaceImageNetDataset(train_dataset, transform_train)
+        test_data = HuggingFaceImageNetDataset(val_dataset, transform_test)
     else:
         raise ValueError(f"Unsupported dataset: {args.dataset}")
 
@@ -113,46 +135,44 @@ def main(args):
         )
     else:
         register_for_auto_class()
-
-        # データセットからラベル情報を取得
-        class_to_idx = getattr(train_data, "class_to_idx", None)
-
-        if isinstance(class_to_idx, dict) and class_to_idx:
-            label_ids = list(class_to_idx.values())
-            max_label_id = max(label_ids)
-            num_labels_for_model = max_label_id + 1
-
-            print(f"Dataset info:")
-            print(f"  - Classes found: {num_classes}")
-            print(f"  - Label ID range: 0 to {max_label_id}")
-            print(f"  - Model num_labels: {num_labels_for_model}")
-
-            # 完全なid2labelマップを作成（欠けているIDは"unused"とする）
-            id2label = {}
-            label2id = {}
-
-            # まず実際のラベルを追加
-            for label, idx in class_to_idx.items():
-                id2label[idx] = str(label)
-                label2id[str(label)] = idx
-
-            # 欠けているIDを埋める
-            for i in range(num_labels_for_model):
-                if i not in id2label:
-                    id2label[i] = f"unused_{i}"
-                    label2id[f"unused_{i}"] = i
-
-            print(f"  - Created complete mapping with {len(id2label)} entries")
+        # データセットからラベルマッピングを1対1で構築（正規名のみ）
+        if args.dataset == "imagenet":
+            # Hugging Face ImageNet-1kの場合、クラス名を取得してラベルマッピングを作成
+            try:
+                # データセットの特徴量からクラス名を取得
+                features = train_dataset.features
+                if "label" in features and hasattr(features["label"], "int2str"):
+                    # int2strマッピングを使用してクラス名を取得
+                    id2label = {
+                        i: features["label"].int2str(i) for i in range(num_classes)
+                    }
+                    label2id = {name: i for i, name in id2label.items()}
+                else:
+                    # フォールバック：数値ラベルのまま使用
+                    id2label = None
+                    label2id = None
+            except Exception as e:
+                print(f"Warning: Could not extract class names from dataset: {e}")
+                # フォールバック：数値ラベルのまま使用
+                id2label = None
+                label2id = None
         else:
-            num_labels_for_model = num_classes
-            id2label = None
-            label2id = None
+            # Imagenetteの場合、従来の処理
+            class_to_idx = getattr(train_data, "class_to_idx", None)
+            if isinstance(class_to_idx, dict) and class_to_idx:
+                # ImageFolder 互換: {label(str): id(int)}
+                label2id = {str(label): int(idx) for label, idx in class_to_idx.items()}
+                id2label = {idx: label for label, idx in label2id.items()}
+            else:
+                # 自動生成（数値ラベル）にフォールバック
+                id2label = None
+                label2id = None
 
         config = AbnConfig(
             arch=args.arch,
-            num_labels=num_labels_for_model,
-            id2label=id2label,
-            label2id=label2id,
+            num_labels=num_classes,
+            id2label=id2label if id2label else None,
+            label2id=label2id if label2id else None,
         )
         model = AbnModelForImageClassification(config)
 
@@ -255,13 +275,6 @@ def parse_args():
         default="./data/Imagenette",
         type=str,
         help="Imagenette のルートディレクトリ",
-    )
-    # ImageNet specific arguments
-    p.add_argument(
-        "--imagenet-root",
-        default="./data/imagenet",
-        type=str,
-        help="ImageNet のルートディレクトリ",
     )
     p.add_argument(
         "-j",
