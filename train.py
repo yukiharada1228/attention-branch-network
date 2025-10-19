@@ -70,48 +70,89 @@ def main(args):
         ]
     )
 
-    # Imagenette 専用（10クラス、公式の train/val split を使用）
-    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
-    num_classes = 10
-    train_data = datasets.Imagenette(
-        root=args.imagenette_root,
-        split="train",
-        size=args.imagenette_size,
-        download=True,
-        transform=transform_train,
-    )
-    test_data = datasets.Imagenette(
-        root=args.imagenette_root,
-        split="val",
-        size=args.imagenette_size,
-        download=True,
-        transform=transform_test,
-    )
+    # データセット選択（Imagenette または ImageNet）
+    if args.dataset == "imagenette":
+        # Imagenette 専用（10クラス、公式の train/val split を使用）
+        # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
+        num_classes = 10
+        train_data = datasets.Imagenette(
+            root=args.imagenette_root,
+            split="train",
+            size=args.imagenette_size,
+            download=True,
+            transform=transform_train,
+        )
+        test_data = datasets.Imagenette(
+            root=args.imagenette_root,
+            split="val",
+            size=args.imagenette_size,
+            download=True,
+            transform=transform_test,
+        )
+    elif args.dataset == "imagenet":
+        # ImageNet 2012 Classification Dataset（1000クラス）
+        # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.ImageNet.html
+        num_classes = 1000
+        train_data = datasets.ImageNet(
+            root=args.imagenet_root,
+            split="train",
+            transform=transform_train,
+        )
+        test_data = datasets.ImageNet(
+            root=args.imagenet_root,
+            split="val",
+            transform=transform_test,
+        )
+    else:
+        raise ValueError(f"Unsupported dataset: {args.dataset}")
 
-    # 学習/評価用モデル準備（Hugging Face 互換モデルへ移行）
+    # 学習/評価用モデル準備（完全版）
     if args.evaluate:
         model = AbnModelForImageClassification.from_pretrained(
             args.checkpoint, trust_remote_code=True
         )
     else:
-        # AutoClass 情報を埋め込み
         register_for_auto_class()
-        # データセットからラベルマッピングを1対1で構築（正規名のみ）
+
+        # データセットからラベル情報を取得
         class_to_idx = getattr(train_data, "class_to_idx", None)
+
         if isinstance(class_to_idx, dict) and class_to_idx:
-            # ImageFolder 互換: {label(str): id(int)}
-            label2id = {str(label): int(idx) for label, idx in class_to_idx.items()}
-            id2label = {idx: label for label, idx in label2id.items()}
+            label_ids = list(class_to_idx.values())
+            max_label_id = max(label_ids)
+            num_labels_for_model = max_label_id + 1
+
+            print(f"Dataset info:")
+            print(f"  - Classes found: {num_classes}")
+            print(f"  - Label ID range: 0 to {max_label_id}")
+            print(f"  - Model num_labels: {num_labels_for_model}")
+
+            # 完全なid2labelマップを作成（欠けているIDは"unused"とする）
+            id2label = {}
+            label2id = {}
+
+            # まず実際のラベルを追加
+            for label, idx in class_to_idx.items():
+                id2label[idx] = str(label)
+                label2id[str(label)] = idx
+
+            # 欠けているIDを埋める
+            for i in range(num_labels_for_model):
+                if i not in id2label:
+                    id2label[i] = f"unused_{i}"
+                    label2id[f"unused_{i}"] = i
+
+            print(f"  - Created complete mapping with {len(id2label)} entries")
         else:
-            # 自動生成（数値ラベル）にフォールバック
+            num_labels_for_model = num_classes
             id2label = None
             label2id = None
 
         config = AbnConfig(
             arch=args.arch,
-            num_labels=num_classes,
-            id2label=id2label if id2label else None,
-            label2id=label2id if label2id else None,
+            num_labels=num_labels_for_model,
+            id2label=id2label,
+            label2id=label2id,
         )
         model = AbnModelForImageClassification(config)
 
@@ -193,7 +234,15 @@ def main(args):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    # Dataset (Imagenette 専用)
+    # Dataset selection
+    p.add_argument(
+        "--dataset",
+        default="imagenette",
+        type=str,
+        choices=["imagenette", "imagenet"],
+        help="Dataset to use for training",
+    )
+    # Imagenette specific arguments
     p.add_argument(
         "--imagenette-size",
         default="full",
@@ -206,6 +255,13 @@ def parse_args():
         default="./data/Imagenette",
         type=str,
         help="Imagenette のルートディレクトリ",
+    )
+    # ImageNet specific arguments
+    p.add_argument(
+        "--imagenet-root",
+        default="./data/imagenet",
+        type=str,
+        help="ImageNet のルートディレクトリ",
     )
     p.add_argument(
         "-j",

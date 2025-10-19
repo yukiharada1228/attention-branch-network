@@ -77,21 +77,37 @@ def main(args):
         ]
     )
 
-    # Imagenette val split を利用
-    test_data = datasets.Imagenette(
-        root=args.imagenette_root,
-        split="val",
-        size=args.imagenette_size,
-        download=True,
-        transform=transform_test,
-    )
+    # データセット選択（Imagenette または ImageNet）
+    if args.dataset == "imagenette":
+        # Imagenette val split を利用
+        test_data = datasets.Imagenette(
+            root=args.imagenette_root,
+            split="val",
+            size=args.imagenette_size,
+            download=True,
+            transform=transform_test,
+        )
+    elif args.dataset == "imagenet":
+        # ImageNet val split を利用
+        test_data = datasets.ImageNet(
+            root=args.imagenet_root,
+            split="val",
+            transform=transform_test,
+        )
+    else:
+        raise ValueError(f"Unsupported dataset: {args.dataset}")
 
     loader = torch.utils.data.DataLoader(
         test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers
     )
 
     idx_to_cls = list(getattr(test_data, "classes", []))
-    num_classes = len(idx_to_cls) if idx_to_cls else 10
+    if args.dataset == "imagenette":
+        num_classes = len(idx_to_cls) if idx_to_cls else 10
+    elif args.dataset == "imagenet":
+        num_classes = len(idx_to_cls) if idx_to_cls else 1000
+    else:
+        num_classes = 10  # fallback
     softmax = nn.Softmax(dim=1)
 
     print(f"データセットから各クラス1枚ずつ（計{num_classes}枚）を収集中...")
@@ -233,7 +249,15 @@ def main(args):
 def parse_args():
     p = argparse.ArgumentParser(description="ABNモデルのアテンション可視化")
 
-    # Dataset
+    # Dataset selection
+    p.add_argument(
+        "--dataset",
+        default="imagenette",
+        type=str,
+        choices=["imagenette", "imagenet"],
+        help="Dataset to use for visualization",
+    )
+    # Imagenette specific arguments
     p.add_argument(
         "--imagenette-size",
         default="full",
@@ -246,6 +270,13 @@ def parse_args():
         default="./data/Imagenette",
         type=str,
         help="Imagenette のルートディレクトリ",
+    )
+    # ImageNet specific arguments
+    p.add_argument(
+        "--imagenet-root",
+        default="./data/imagenet",
+        type=str,
+        help="ImageNet のルートディレクトリ",
     )
     p.add_argument(
         "-j",
