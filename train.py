@@ -117,6 +117,10 @@ def main(args):
                 image = item["image"]
                 label = item["label"]
 
+                # 画像がグレースケールの場合はRGBに変換
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+
                 # PIL Imageをtensorに変換
                 if self.transform:
                     image = self.transform(image)
