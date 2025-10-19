@@ -107,19 +107,8 @@ def main(args):
     )
 
     # データセットに前処理を適用（set_transformを使用）
-    def preprocess_train(example):
-        # バッチデータの各画像をRGBに変換
-        processed_images = []
-        for img in example["image"]:
-            if img.mode != "RGB":
-                processed_images.append(img.convert("RGB"))
-            else:
-                processed_images.append(img)
-        example["image"] = processed_images
-        return example
-
-    def preprocess_eval(example):
-        # バッチデータの各画像をRGBに変換
+    def preprocess_images(example):
+        """バッチデータの各画像をRGBに変換する前処理関数"""
         processed_images = []
         for img in example["image"]:
             if img.mode != "RGB":
@@ -130,8 +119,8 @@ def main(args):
         return example
 
     # データセットに前処理を適用（リアルタイム処理）
-    train_data.set_transform(preprocess_train)
-    test_data.set_transform(preprocess_eval)
+    train_data.set_transform(preprocess_images)
+    test_data.set_transform(preprocess_images)
 
     # 学習/評価用モデル準備
     if args.evaluate:
