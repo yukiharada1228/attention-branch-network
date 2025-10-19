@@ -1,4 +1,6 @@
 from .configuration_abn import AbnConfig
+from .image_processing_abn import (AbnImageProcessor,
+                                   AbnImageProcessorForTraining)
 from .modeling_abn import AbnModel, AbnModelForImageClassification
 
 
@@ -9,10 +11,13 @@ def register_for_auto_class():
     AbnModelForImageClassification.register_for_auto_class(
         "AutoModelForImageClassification"
     )
+    AbnImageProcessor.register_for_auto_class("AutoImageProcessor")
 
 
 __all__ = [
     "AbnConfig",
     "AbnModel",
     "AbnModelForImageClassification",
+    "AbnImageProcessor",
+    "AbnImageProcessorForTraining",
 ]

@@ -5,21 +5,55 @@ import random
 
 import numpy as np
 import torch
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
 from datasets import load_dataset
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainerCallback, TrainingArguments
 
-from models import (AbnConfig, AbnModelForImageClassification,
-                    register_for_auto_class)
+from models import (AbnConfig, AbnImageProcessor, AbnImageProcessorForTraining,
+                    AbnModelForImageClassification, register_for_auto_class)
+
+
+class TrainingModeCallback(TrainerCallback):
+    """学習時と評価時にDataCollatorのモードを切り替えるコールバック"""
+
+    def __init__(self, data_collator):
+        self.data_collator = data_collator
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        """学習開始時に学習モードに設定"""
+        self.data_collator.set_training(True)
+
+    def on_eval_begin(self, args, state, control, **kwargs):
+        """評価開始時に評価モードに設定"""
+        self.data_collator.set_training(False)
+
+    def on_train_epoch_begin(self, args, state, control, **kwargs):
+        """学習エポック開始時に学習モードに設定"""
+        self.data_collator.set_training(True)
 
 
 class DataCollatorImageClassification:
+    def __init__(self, image_processor_train, image_processor_eval):
+        self.image_processor_train = image_processor_train
+        self.image_processor_eval = image_processor_eval
+        self.is_training = True
+
     def __call__(self, features):
-        # features: list of (img_tensor, label)
-        pixel_values = torch.stack([f[0] for f in features])
-        labels = torch.tensor([f[1] for f in features], dtype=torch.long)
-        return {"pixel_values": pixel_values, "labels": labels}
+        # features: list of {"image": PIL.Image, "label": int}
+        images = [f["image"] for f in features]
+        labels = torch.tensor([f["label"] for f in features], dtype=torch.long)
+
+        # 学習時と評価時で異なるImageProcessorを使用
+        if self.is_training:
+            processed = self.image_processor_train(images, return_tensors="pt")
+        else:
+            processed = self.image_processor_eval(images, return_tensors="pt")
+
+        processed["labels"] = labels
+        return processed
+
+    def set_training(self, is_training):
+        """学習時と評価時を切り替え"""
+        self.is_training = is_training
 
 
 def compute_metrics(eval_pred):
@@ -53,124 +87,75 @@ def main(args):
         torch.cuda.manual_seed_all(args.manualSeed)
     torch.backends.cudnn.benchmark = True
 
-    # 画像前処理（ImageNet 標準統計）
-    transform_train = transforms.Compose(
-        [
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
+    # AutoImageProcessorを使用した画像前処理
+    register_for_auto_class()
+
+    # 学習用と評価用のImageProcessorを初期化
+    image_processor_train = AbnImageProcessorForTraining()
+    image_processor_eval = AbnImageProcessor()
+
+    # ImageNet 2012 Classification Dataset（1000クラス）
+    # https://huggingface.co/datasets/ILSVRC/imagenet-1k
+    num_classes = 1000
+
+    # Hugging Face datasetsからImageNet-1kを読み込み
+    train_data = load_dataset(
+        "ILSVRC/imagenet-1k", split="train", trust_remote_code=True
     )
-    transform_test = transforms.Compose(
-        [
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
+    test_data = load_dataset(
+        "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
     )
 
-    # データセット選択（Imagenette または ImageNet）
-    if args.dataset == "imagenette":
-        # Imagenette 専用（10クラス、公式の train/val split を使用）
-        # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
-        num_classes = 10
-        train_data = datasets.Imagenette(
-            root=args.imagenette_root,
-            split="train",
-            size=args.imagenette_size,
-            download=True,
-            transform=transform_train,
-        )
-        test_data = datasets.Imagenette(
-            root=args.imagenette_root,
-            split="val",
-            size=args.imagenette_size,
-            download=True,
-            transform=transform_test,
-        )
-    elif args.dataset == "imagenet":
-        # ImageNet 2012 Classification Dataset（1000クラス）
-        # https://huggingface.co/datasets/ILSVRC/imagenet-1k
-        num_classes = 1000
+    # データセットに前処理を適用（set_transformを使用）
+    def preprocess_train(example):
+        # バッチデータの各画像をRGBに変換
+        processed_images = []
+        for img in example["image"]:
+            if img.mode != "RGB":
+                processed_images.append(img.convert("RGB"))
+            else:
+                processed_images.append(img)
+        example["image"] = processed_images
+        return example
 
-        # Hugging Face datasetsからImageNet-1kを読み込み
-        train_dataset = load_dataset(
-            "ILSVRC/imagenet-1k", split="train", trust_remote_code=True
-        )
-        val_dataset = load_dataset(
-            "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
-        )
+    def preprocess_eval(example):
+        # バッチデータの各画像をRGBに変換
+        processed_images = []
+        for img in example["image"]:
+            if img.mode != "RGB":
+                processed_images.append(img.convert("RGB"))
+            else:
+                processed_images.append(img)
+        example["image"] = processed_images
+        return example
 
-        # カスタムデータセットクラスを作成
-        class HuggingFaceImageNetDataset:
-            def __init__(self, dataset, transform):
-                self.dataset = dataset
-                self.transform = transform
+    # データセットに前処理を適用（リアルタイム処理）
+    train_data.set_transform(preprocess_train)
+    test_data.set_transform(preprocess_eval)
 
-            def __len__(self):
-                return len(self.dataset)
-
-            def __getitem__(self, idx):
-                item = self.dataset[idx]
-                image = item["image"]
-                label = item["label"]
-
-                # 画像がグレースケールの場合はRGBに変換
-                if image.mode != "RGB":
-                    image = image.convert("RGB")
-
-                # PIL Imageをtensorに変換
-                if self.transform:
-                    image = self.transform(image)
-
-                return image, label
-
-        train_data = HuggingFaceImageNetDataset(train_dataset, transform_train)
-        test_data = HuggingFaceImageNetDataset(val_dataset, transform_test)
-    else:
-        raise ValueError(f"Unsupported dataset: {args.dataset}")
-
-    # 学習/評価用モデル準備（完全版）
+    # 学習/評価用モデル準備
     if args.evaluate:
         model = AbnModelForImageClassification.from_pretrained(
             args.checkpoint, trust_remote_code=True
         )
     else:
-        register_for_auto_class()
-        # データセットからラベルマッピングを1対1で構築（正規名のみ）
-        if args.dataset == "imagenet":
-            # Hugging Face ImageNet-1kの場合、クラス名を取得してラベルマッピングを作成
-            try:
-                # データセットの特徴量からクラス名を取得
-                features = train_dataset.features
-                if "label" in features and hasattr(features["label"], "int2str"):
-                    # int2strマッピングを使用してクラス名を取得
-                    id2label = {
-                        i: features["label"].int2str(i) for i in range(num_classes)
-                    }
-                    label2id = {name: i for i, name in id2label.items()}
-                else:
-                    # フォールバック：数値ラベルのまま使用
-                    id2label = None
-                    label2id = None
-            except Exception as e:
-                print(f"Warning: Could not extract class names from dataset: {e}")
+        # ImageNet-1kのクラス名を取得してラベルマッピングを作成
+        try:
+            # データセットの特徴量からクラス名を取得
+            features = train_data.features
+            if "label" in features and hasattr(features["label"], "int2str"):
+                # int2strマッピングを使用してクラス名を取得
+                id2label = {i: features["label"].int2str(i) for i in range(num_classes)}
+                label2id = {name: i for i, name in id2label.items()}
+            else:
                 # フォールバック：数値ラベルのまま使用
                 id2label = None
                 label2id = None
-        else:
-            # Imagenetteの場合、従来の処理
-            class_to_idx = getattr(train_data, "class_to_idx", None)
-            if isinstance(class_to_idx, dict) and class_to_idx:
-                # ImageFolder 互換: {label(str): id(int)}
-                label2id = {str(label): int(idx) for label, idx in class_to_idx.items()}
-                id2label = {idx: label for label, idx in label2id.items()}
-            else:
-                # 自動生成（数値ラベル）にフォールバック
-                id2label = None
-                label2id = None
+        except Exception as e:
+            print(f"Warning: Could not extract class names from dataset: {e}")
+            # フォールバック：数値ラベルのまま使用
+            id2label = None
+            label2id = None
 
         config = AbnConfig(
             arch=args.arch,
@@ -180,7 +165,10 @@ def main(args):
         )
         model = AbnModelForImageClassification(config)
 
-    data_collator = DataCollatorImageClassification()
+    # 学習用と評価用のImageProcessorを使用するDataCollatorを作成
+    data_collator = DataCollatorImageClassification(
+        image_processor_train, image_processor_eval
+    )
 
     training_args = TrainingArguments(
         output_dir=args.checkpoint,
@@ -219,6 +207,9 @@ def main(args):
 
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
+    # コールバックを作成
+    training_mode_callback = TrainingModeCallback(data_collator)
+
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -227,6 +218,7 @@ def main(args):
         data_collator=data_collator,
         compute_metrics=compute_metrics,
         optimizers=(optimizer, lr_scheduler),
+        callbacks=[training_mode_callback],
     )
 
     if args.evaluate:
@@ -258,28 +250,6 @@ def main(args):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    # Dataset selection
-    p.add_argument(
-        "--dataset",
-        default="imagenette",
-        type=str,
-        choices=["imagenette", "imagenet"],
-        help="Dataset to use for training",
-    )
-    # Imagenette specific arguments
-    p.add_argument(
-        "--imagenette-size",
-        default="full",
-        type=str,
-        choices=["full", "320px", "160px"],
-        help="Imagenette のサイズバリアント",
-    )
-    p.add_argument(
-        "--imagenette-root",
-        default="./data/Imagenette",
-        type=str,
-        help="Imagenette のルートディレクトリ",
-    )
     p.add_argument(
         "-j",
         "--workers",
