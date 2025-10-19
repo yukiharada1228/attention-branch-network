@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+from datasets import load_dataset
 from transformers import AutoModelForImageClassification
+
+from models import AbnImageProcessor, register_for_auto_class
 
 
 def denormalize_image(img_tensor, mean, std):
@@ -58,6 +59,9 @@ def main(args):
         "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     )
 
+    # AutoImageProcessorを使用した画像前処理
+    register_for_auto_class()
+
     # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
     model = AutoModelForImageClassification.from_pretrained(
@@ -67,47 +71,70 @@ def main(args):
     model.to(device)
     model.eval()
 
-    # 評価用の変換
-    transform_test = transforms.Compose(
-        [
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
+    # 評価用のImageProcessorを初期化
+    image_processor = AbnImageProcessor()
 
-    # データセット選択（Imagenette または ImageNet）
-    if args.dataset == "imagenette":
-        # Imagenette val split を利用
-        test_data = datasets.Imagenette(
-            root=args.imagenette_root,
-            split="val",
-            size=args.imagenette_size,
-            download=True,
-            transform=transform_test,
-        )
-    elif args.dataset == "imagenet":
-        # ImageNet val split を利用
-        test_data = datasets.ImageNet(
-            root=args.imagenet_root,
-            split="val",
-            transform=transform_test,
-        )
-    else:
-        raise ValueError(f"Unsupported dataset: {args.dataset}")
+    # ImageNet-1kデータセットを読み込み
+    test_data = load_dataset(
+        "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
+    )
+    num_classes = 1000
+
+    # データセットに前処理を適用（set_transformを使用）
+    def preprocess_eval(example):
+        # バッチデータの各画像をRGBに変換
+        processed_images = []
+        for img in example["image"]:
+            if img.mode != "RGB":
+                processed_images.append(img.convert("RGB"))
+            else:
+                processed_images.append(img)
+        example["image"] = processed_images
+        return example
+
+    test_data.set_transform(preprocess_eval)
+
+    # カスタムデータセットクラスを作成
+    class HuggingFaceImageNetDataset:
+        def __init__(self, dataset, image_processor):
+            self.dataset = dataset
+            self.image_processor = image_processor
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            item = self.dataset[idx]
+            image = item["image"]
+            label = item["label"]
+
+            # 画像がグレースケールの場合はRGBに変換
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+
+            # PIL Imageをtensorに変換
+            processed = self.image_processor([image], return_tensors="pt")
+            image_tensor = processed["pixel_values"][0]  # バッチから単一画像を取得
+
+            return image_tensor, label
+
+    # データセットをラップ
+    test_dataset = HuggingFaceImageNetDataset(test_data, image_processor)
 
     loader = torch.utils.data.DataLoader(
-        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers
+        test_dataset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers
     )
 
-    idx_to_cls = list(getattr(test_data, "classes", []))
-    if args.dataset == "imagenette":
-        num_classes = len(idx_to_cls) if idx_to_cls else 10
-    elif args.dataset == "imagenet":
-        num_classes = len(idx_to_cls) if idx_to_cls else 1000
-    else:
-        num_classes = 10  # fallback
+    # クラス名を取得
+    try:
+        features = test_data.features
+        if "label" in features and hasattr(features["label"], "int2str"):
+            idx_to_cls = [features["label"].int2str(i) for i in range(num_classes)]
+        else:
+            idx_to_cls = [f"Class {i}" for i in range(num_classes)]
+    except Exception as e:
+        print(f"Warning: Could not extract class names from dataset: {e}")
+        idx_to_cls = [f"Class {i}" for i in range(num_classes)]
     softmax = nn.Softmax(dim=1)
 
     print(f"データセットから各クラス1枚ずつ（計{num_classes}枚）を収集中...")
@@ -248,36 +275,6 @@ def main(args):
 
 def parse_args():
     p = argparse.ArgumentParser(description="ABNモデルのアテンション可視化")
-
-    # Dataset selection
-    p.add_argument(
-        "--dataset",
-        default="imagenette",
-        type=str,
-        choices=["imagenette", "imagenet"],
-        help="Dataset to use for visualization",
-    )
-    # Imagenette specific arguments
-    p.add_argument(
-        "--imagenette-size",
-        default="full",
-        type=str,
-        choices=["full", "320px", "160px"],
-        help="Imagenette のサイズバリアント",
-    )
-    p.add_argument(
-        "--imagenette-root",
-        default="./data/Imagenette",
-        type=str,
-        help="Imagenette のルートディレクトリ",
-    )
-    # ImageNet specific arguments
-    p.add_argument(
-        "--imagenet-root",
-        default="./data/imagenet",
-        type=str,
-        help="ImageNet のルートディレクトリ",
-    )
     p.add_argument(
         "-j",
         "--workers",
@@ -300,14 +297,6 @@ def parse_args():
     )
 
     # Model
-    p.add_argument(
-        "--arch",
-        "-a",
-        metavar="ARCH",
-        default="resnet152",
-        choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
-        help="モデルアーキテクチャ (default: resnet152)",
-    )
     p.add_argument(
         "--ckpt",
         type=str,
