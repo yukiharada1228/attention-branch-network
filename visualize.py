@@ -80,49 +80,28 @@ def main(args):
     )
     num_classes = 1000
 
-    # データセットに前処理を適用（set_transformを使用）
+    # データセットに前処理を適用（Hugging Faceの標準的な方法）
     def preprocess_eval(example):
-        # バッチデータの各画像をRGBに変換
-        processed_images = []
-        for img in example["image"]:
-            if img.mode != "RGB":
-                processed_images.append(img.convert("RGB"))
-            else:
-                processed_images.append(img)
-        example["image"] = processed_images
+        # 画像をRGBに変換
+        if example["image"].mode != "RGB":
+            example["image"] = example["image"].convert("RGB")
+        
+        # ImageProcessorで前処理
+        processed = image_processor([example["image"]], return_tensors="pt")
+        example["pixel_values"] = processed["pixel_values"][0]  # バッチから単一画像を取得
+        
         return example
 
     test_data.set_transform(preprocess_eval)
 
-    # カスタムデータセットクラスを作成
-    class HuggingFaceImageNetDataset:
-        def __init__(self, dataset, image_processor):
-            self.dataset = dataset
-            self.image_processor = image_processor
-
-        def __len__(self):
-            return len(self.dataset)
-
-        def __getitem__(self, idx):
-            item = self.dataset[idx]
-            image = item["image"]
-            label = item["label"]
-
-            # 画像がグレースケールの場合はRGBに変換
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-
-            # PIL Imageをtensorに変換
-            processed = self.image_processor([image], return_tensors="pt")
-            image_tensor = processed["pixel_values"][0]  # バッチから単一画像を取得
-
-            return image_tensor, label
-
-    # データセットをラップ
-    test_dataset = HuggingFaceImageNetDataset(test_data, image_processor)
+    # データローダーを作成（Hugging Faceの標準的な方法）
+    def collate_fn(batch):
+        pixel_values = torch.stack([item["pixel_values"] for item in batch])
+        labels = torch.tensor([item["label"] for item in batch], dtype=torch.long)
+        return {"pixel_values": pixel_values, "labels": labels}
 
     loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers
+        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers, collate_fn=collate_fn
     )
 
     # クラス名を取得
@@ -143,9 +122,9 @@ def main(args):
         # 各クラスから一枚ずつ画像を収集
         class_data = {}
 
-        for images, labels in loader:
-            images = images.to(device)
-            labels = labels.to(device)
+        for batch in loader:
+            images = batch["pixel_values"].to(device)
+            labels = batch["labels"].to(device)
 
             # ABNでは forward は logits のみのため、アテンションは内部に保存されたマップから取得する
             # 可視化には model.model.attention_map に保存されたアテンションマップを用いる
