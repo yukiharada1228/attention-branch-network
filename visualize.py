@@ -8,9 +8,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from datasets import load_dataset
-from transformers import AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-from models import AbnImageProcessor, register_for_auto_class
+from models import register_for_auto_class
 
 
 def denormalize_image(img_tensor, mean, std):
@@ -71,8 +71,8 @@ def main(args):
     model.to(device)
     model.eval()
 
-    # 評価用のImageProcessorを初期化
-    image_processor = AbnImageProcessor()
+    # 評価用のImageProcessorを初期化（AutoImageProcessorを使用）
+    image_processor = AutoImageProcessor.from_pretrained(args.ckpt, trust_remote_code=True)
 
     # ImageNet-1kデータセットを読み込み
     test_data = load_dataset(
