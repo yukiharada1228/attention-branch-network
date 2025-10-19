@@ -80,28 +80,39 @@ def main(args):
     )
     num_classes = 1000
 
-    # データセットに前処理を適用（Hugging Faceの標準的な方法）
+    # データセットに前処理を適用（train.pyと同じ方法）
     def preprocess_eval(example):
-        # 画像をRGBに変換
-        if example["image"].mode != "RGB":
-            example["image"] = example["image"].convert("RGB")
-        
-        # ImageProcessorで前処理
-        processed = image_processor([example["image"]], return_tensors="pt")
-        example["pixel_values"] = processed["pixel_values"][0]  # バッチから単一画像を取得
-        
+        # バッチデータの各画像をRGBに変換
+        processed_images = []
+        for img in example["image"]:
+            if img.mode != "RGB":
+                processed_images.append(img.convert("RGB"))
+            else:
+                processed_images.append(img)
+        example["image"] = processed_images
         return example
 
     test_data.set_transform(preprocess_eval)
 
-    # データローダーを作成（Hugging Faceの標準的な方法）
-    def collate_fn(batch):
-        pixel_values = torch.stack([item["pixel_values"] for item in batch])
-        labels = torch.tensor([item["label"] for item in batch], dtype=torch.long)
-        return {"pixel_values": pixel_values, "labels": labels}
+    # DataCollatorを作成（train.pyと同じ方法）
+    class DataCollatorImageClassification:
+        def __init__(self, image_processor):
+            self.image_processor = image_processor
+
+        def __call__(self, features):
+            # features: list of {"image": PIL.Image, "label": int}
+            images = [f["image"] for f in features]
+            labels = torch.tensor([f["label"] for f in features], dtype=torch.long)
+
+            # ImageProcessorで前処理
+            processed = self.image_processor(images, return_tensors="pt")
+            processed["labels"] = labels
+            return processed
+
+    data_collator = DataCollatorImageClassification(image_processor)
 
     loader = torch.utils.data.DataLoader(
-        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers, collate_fn=collate_fn
+        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers, collate_fn=data_collator
     )
 
     # クラス名を取得
