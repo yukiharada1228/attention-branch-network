@@ -67,7 +67,9 @@ def main(args):
     model.eval()
 
     # 評価用のImageProcessorを初期化（AutoImageProcessorを使用）
-    image_processor = AutoImageProcessor.from_pretrained(args.ckpt, trust_remote_code=True)
+    image_processor = AutoImageProcessor.from_pretrained(
+        args.ckpt, trust_remote_code=True
+    )
 
     # ImageNet-1kデータセットを読み込み
     test_data = load_dataset(
@@ -107,7 +109,11 @@ def main(args):
     data_collator = DataCollatorImageClassification(image_processor)
 
     loader = torch.utils.data.DataLoader(
-        test_data, batch_size=args.test_batch, shuffle=False, num_workers=args.workers, collate_fn=data_collator
+        test_data,
+        batch_size=args.test_batch,
+        shuffle=False,
+        num_workers=args.workers,
+        collate_fn=data_collator,
     )
 
     # クラス名を取得
