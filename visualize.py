@@ -10,8 +10,6 @@ import torch.nn as nn
 from datasets import load_dataset
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-from models import register_for_auto_class
-
 
 def denormalize_image(img_tensor, mean, std):
     """正規化された画像を元に戻す"""
@@ -58,9 +56,6 @@ def main(args):
     device = torch.device(
         "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     )
-
-    # AutoImageProcessorを使用した画像前処理
-    register_for_auto_class()
 
     # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
