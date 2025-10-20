@@ -60,7 +60,7 @@ def main(args):
     # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
     model = AutoModelForImageClassification.from_pretrained(
-        args.ckpt, trust_remote_code=True
+        args.checkpoint, trust_remote_code=True
     )
     # 入力テンソルと同じデバイスにモデルを移動
     model.to(device)
@@ -68,7 +68,7 @@ def main(args):
 
     # 評価用のImageProcessorを初期化
     image_processor = AutoImageProcessor.from_pretrained(
-        args.ckpt, trust_remote_code=True
+        args.checkpoint, trust_remote_code=True
     )
 
     # ImageNet-1kデータセットを読み込み
@@ -78,21 +78,7 @@ def main(args):
     num_classes = 1000
     display_classes = args.num_classes
 
-    # データセットに前処理を適用（train.pyと同じ方法）
-    def preprocess_eval(example):
-        # バッチデータの各画像をRGBに変換
-        processed_images = []
-        for img in example["image"]:
-            if img.mode != "RGB":
-                processed_images.append(img.convert("RGB"))
-            else:
-                processed_images.append(img)
-        example["image"] = processed_images
-        return example
-
-    test_data.set_transform(preprocess_eval)
-
-    # DataCollatorを作成（train.pyと同じ方法）
+    # DataCollatorを作成
     class DataCollatorImageClassification:
         def __init__(self, image_processor):
             self.image_processor = image_processor
@@ -291,10 +277,11 @@ def parse_args():
 
     # Model
     p.add_argument(
-        "--ckpt",
+        "-c",
+        "--checkpoint",
         type=str,
-        default="checkpoint/model.safetensors",
-        help="チェックポイントパス (default: checkpoint/model.safetensors)",
+        default="checkpoint",
+        help="チェックポイントパス (default: checkpoint)",
     )
 
     # Output

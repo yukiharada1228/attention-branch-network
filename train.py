@@ -106,22 +106,6 @@ def main(args):
         "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
     )
 
-    # データセットに前処理を適用（set_transformを使用）
-    def preprocess_images(example):
-        """バッチデータの各画像をRGBに変換する前処理関数"""
-        processed_images = []
-        for img in example["image"]:
-            if img.mode != "RGB":
-                processed_images.append(img.convert("RGB"))
-            else:
-                processed_images.append(img)
-        example["image"] = processed_images
-        return example
-
-    # データセットに前処理を適用（リアルタイム処理）
-    train_data.set_transform(preprocess_images)
-    test_data.set_transform(preprocess_images)
-
     # 学習/評価用モデル準備
     if args.evaluate:
         model = AbnModelForImageClassification.from_pretrained(
