@@ -1,60 +1,61 @@
 # attention-branch-network
 
-Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagenette`（10クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
+Attention Branch Network（ABN）の実装です。ImageNet-1k（1000クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
 ![Attention Maps](outputs/abn_attentions.png?v=1)
 
 ## 概要
 
-このプロジェクトは ABN を ResNet 系バックボーン上に実装し、Imagenette データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
+このプロジェクトは ABN を ResNet 系バックボーン上に実装し、ImageNet-1k データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
 
 ## 訓練結果
 
-ResNet152 + ABN での Imagenette 10クラス分類の結果:
+ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
 
-- **Top-1 Accuracy**: 90.47%
-- **Top-5 Accuracy**: 99.21%
-- **Validation Loss**: 0.6205
-- **Training Epochs**: 90 epochs
+- **Top-1 Accuracy**: 学習中（結果は学習完了後に更新予定）
+- **Top-5 Accuracy**: 学習中（結果は学習完了後に更新予定）
+- **Validation Loss**: 学習中（結果は学習完了後に更新予定）
+- **Training Epochs**: 90 epochs（既定値）
 
 ## 学習済みモデル
 
 このプロジェクトで学習したモデルがHugging Face Hubで公開されています：
 
-**🔗 [yukiharada1228/abn-resnet152-imagenette](https://huggingface.co/yukiharada1228/abn-resnet152-imagenette)**
+**🔗 [yukiharada1228/abn-resnet152-imagenet](https://huggingface.co/yukiharada1228/abn-resnet152-imagenet)**（学習完了後に公開予定）
 
 ### モデル仕様
 - **アーキテクチャ**: ResNet152 + Attention Branch Network
-- **データセット**: Imagenette (10クラス)
-- **性能**: Top-1 Accuracy 90.47%, Top-5 Accuracy 99.21%
-- **モデルサイズ**: 73.3M parameters
+- **データセット**: ImageNet-1k (1000クラス)
+- **性能**: 学習完了後に更新予定
+- **モデルサイズ**: 約60M parameters（ImageNet-1k用）
 - **フォーマット**: Safetensors
 
 ### 使用方法
 
 ```python
-from transformers import AutoModelForImageClassification
-import torchvision.transforms as T
+from transformers import AutoModelForImageClassification, AutoImageProcessor
 import torch
+from PIL import Image
 
-# モデルの読み込み
+# モデルとImageProcessorの読み込み
 model = AutoModelForImageClassification.from_pretrained(
-    "yukiharada1228/abn-resnet152-imagenette",
+    "yukiharada1228/abn-resnet152-imagenet",
     trust_remote_code=True,
 )
+image_processor = AutoImageProcessor.from_pretrained(
+    "yukiharada1228/abn-resnet152-imagenet",
+    trust_remote_code=True,
+)
+
 model.eval()
 
-# 前処理
-transform = T.Compose([
-    T.Resize(256),
-    T.CenterCrop(224),
-    T.ToTensor(),
-    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+# 画像の前処理
+image = Image.open("path/to/your/image.jpg")
+inputs = image_processor(images=image, return_tensors="pt")
 
 # 推論
 with torch.no_grad():
-    outputs = model(pixel_values=pixel_values)
+    outputs = model(**inputs)
     logits = outputs.logits
     attention_map = model.model.attention_map  # (B,1,H,W)
 ```
@@ -64,13 +65,14 @@ with torch.no_grad():
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette --out-dir outputs --prefix abn
+uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenet --out-dir outputs --prefix abn
 ```
 
 ## 主な機能
 
-- **Imagenette 10クラス分類**: 公式の `train/val` 分割をそのまま利用
-- **注意機構の可視化**: 原画像とヒートマップ重畳を横並びペアでグリッド保存（クラス数に合わせて正方に近いレイアウト。例: 10クラス → 2×5 ペア）
+- **ImageNet-1k 1000クラス分類**: Hugging Face datasetsから自動ダウンロード
+- **注意機構の可視化**: 原画像とヒートマップ重畳を横並びペアでグリッド保存（指定したクラス数分のサンプルを表示）
+- **画像処理モジュール**: `image_processing_abn.py` で画像の前処理・後処理を統合管理
 - **複数の ResNet 対応**: ResNet18/34/50/101/152
 - **Trainer 連携**: 最良モデルの自動保存・読み込みに対応
 - **チェックポイント互換**: `model.safetensors` と `checkpoint-XXXX` のどちらからでも可視化可能
@@ -82,10 +84,9 @@ attention-branch-network/
 ├── models/                 # ABN モデル実装（HF互換）
 │   ├── __init__.py
 │   ├── configuration_abn.py
+│   ├── image_processing_abn.py
 │   ├── modeling_abn.py
 │   └── resnet_abn_backbone.py
-├── data/                  # データセット（初回実行時に自動ダウンロード）
-│   └── Imagenette/
 ├── checkpoint/            # Trainer 出力（最良モデルや epoch ごとの ckpt）
 │   └── runs/              # TensorBoard 互換ログ
 ├── outputs/               # 可視化結果（まとめ画像）
@@ -94,7 +95,9 @@ attention-branch-network/
 ├── visualize.py           # 注意マップ可視化
 ├── main.py                # エントリ（サンプル）
 ├── pyproject.toml         # 依存関係（uv 対応）
-└── uv.lock
+├── uv.lock
+├── LICENSE
+└── NOTICE.txt
 ```
 
 ## 動作環境
@@ -109,12 +112,13 @@ attention-branch-network/
 uv sync
 ```
 
-## データセット（Imagenette）
+## データセット（ImageNet-1k）
 
-`train.py`/`visualize.py` は初回実行時に Imagenette を自動ダウンロードします。
+`train.py`/`visualize.py` は初回実行時に ImageNet-1k を自動ダウンロードします。
 
-- 既定の保存先: `./data/Imagenette`
-- サイズ指定: `--imagenette-size {full|320px|160px}`（既定: `full`）
+- データソース: Hugging Face datasets (`ILSVRC/imagenet-1k`)
+- クラス数: 1000クラス
+- 分割: train（学習用）、validation（評価用）
 
 ## 使い方
 
@@ -150,7 +154,6 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 
 - 学習（train.py）
   - `--arch {resnet18,resnet34,resnet50,resnet101,resnet152}`（既定: `resnet152`）
-  - `--imagenette-root`（既定: `./data/Imagenette`） / `--imagenette-size {full|320px|160px}`（既定: `full`）
   - `-j/--workers`（既定: 4）
   - `--train-batch`（既定: 64）/`--test-batch`（既定: 100）
   - `--epochs`（既定: 90）/`--lr`（既定: 0.1）/`--momentum`（既定: 0.9）/`--wd`（既定: 1e-4）
@@ -162,7 +165,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
   - `--ckpt`（既定: `checkpoint/model.safetensors`。`checkpoint-XXXX/` も可）
   - `--out-dir`（既定: `outputs`）/`--prefix`（既定: `abn`）/`--dpi`（既定: 200）
   - `--attention-alpha`（0.0–1.0、既定: 1.0。1.0で単純加算）/`--no-display`
-  - `--arch` / `--imagenette-root` / `--imagenette-size` / `-j/--workers` / `--gpu-id` または `--cpu`
+  - `--num-classes`（表示するクラス数、既定: 10）/`--arch` / `-j/--workers` / `--gpu-id` または `--cpu`
 
 ## 可視化結果・アルゴリズム
 
@@ -174,7 +177,7 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 2. アテンション: `attention[0]` を 入力解像度へ `cv2.resize`
 3. カラーマップ: `cv2.COLORMAP_JET` を適用
 4. 合成: `cv2.add(original_bgr, jet_map)`。`--attention-alpha` で強度調整（1.0 で単純加算）
-5. レイアウト: 各クラスから1枚ずつ抽出し、左に原画像・右に重畳画像のペアをタイル配置
+5. レイアウト: 指定したクラス数分のサンプルを抽出し、左に原画像・右に重畳画像のペアをタイル配置
 6. 表示: 既定で表示、`--no-display` で保存のみ
 
 ## 対応アーキテクチャ
