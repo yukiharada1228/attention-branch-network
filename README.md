@@ -82,7 +82,7 @@ uv run visualize.py --ckpt yukiharada1228/abn-resnet152 --out-dir outputs --pref
 
 ```
 attention-branch-network/
-├── models/                 # ABN モデル実装（HF互換）
+├── abn/                    # ABN モデル実装（HF互換）
 │   ├── __init__.py
 │   ├── configuration_abn.py
 │   ├── image_processing_abn.py

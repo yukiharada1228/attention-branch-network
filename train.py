@@ -8,8 +8,8 @@ import torch
 from datasets import load_dataset
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
-from models import (AbnConfig, AbnImageProcessor, AbnImageProcessorForTraining,
-                    AbnModelForImageClassification, register_for_auto_class)
+from abn import (AbnConfig, AbnImageProcessor, AbnImageProcessorForTraining,
+                 AbnModelForImageClassification, register_for_auto_class)
 
 
 class TrainingModeCallback(TrainerCallback):
