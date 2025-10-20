@@ -45,7 +45,6 @@ processor = AutoImageProcessor.from_pretrained(
     "yukiharada1228/abn-resnet152-imagenet",
     trust_remote_code=True,
 )
-
 model = AutoModelForImageClassification.from_pretrained(
     "yukiharada1228/abn-resnet152-imagenet",
     trust_remote_code=True,
