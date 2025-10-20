@@ -6,7 +6,6 @@ from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 class ResNetABN(ResNet):
     def __init__(self, block=BasicBlock, layers=(2, 2, 2, 2), num_classes=10):
         super().__init__(block, layers, num_classes=num_classes)
-
         feat_channels = 256 * block.expansion
 
         # att_layer4を作成（stride=1）
@@ -19,10 +18,10 @@ class ResNetABN(ResNet):
             512 * block.expansion, num_classes, kernel_size=1, bias=False
         )
         self.att_norm2 = nn.BatchNorm2d(num_classes)
-        self.att_conv2 = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
-        self.att_conv3 = nn.Conv2d(num_classes, 1, kernel_size=3, padding=1, bias=False)
-        self.att_norm3 = nn.BatchNorm2d(1)
-        self.att_logits_pool = nn.AdaptiveAvgPool2d(1)
+        self.att_gap = nn.AdaptiveAvgPool2d(1)
+
+        # Attention map生成用
+        self.att_conv_map = nn.Conv2d(num_classes, 1, kernel_size=1, bias=False)
 
         # layer4を再構築（stride=2）
         del self.layer4
@@ -36,7 +35,6 @@ class ResNetABN(ResNet):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -44,16 +42,17 @@ class ResNetABN(ResNet):
         # Attention branch
         a = self.att_layer4(x)
         a = self.att_norm(a)
+        a = self.relu(a)
         a = self.att_conv(a)
-        a = self.relu(self.att_norm2(a))
-
-        # Attention map
-        att_map = torch.sigmoid(self.att_norm3(self.att_conv3(a)))
-        self.attention_map = att_map
+        a = self.att_norm2(a)
+        a = self.relu(a)
 
         # Attention logits
-        a = self.att_conv2(a)
-        att_logits = self.att_logits_pool(a).flatten(1)
+        att_logits = self.att_gap(a).flatten(1)
+
+        # Attention map
+        att_map = torch.sigmoid(self.att_conv_map(a))
+        self.attention_map = att_map
 
         # Perception branch
         rx = x * att_map + x
