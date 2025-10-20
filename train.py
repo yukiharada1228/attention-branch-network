@@ -127,6 +127,8 @@ def main(args):
         model = AbnModelForImageClassification.from_pretrained(
             args.checkpoint, trust_remote_code=True
         )
+        # 評価時は画像プロセッサーも読み込み
+        image_processor_eval = AbnImageProcessor.from_pretrained(args.checkpoint)
     else:
         # ImageNet-1kのクラス名を取得してラベルマッピングを作成
         try:
@@ -220,6 +222,10 @@ def main(args):
     )
     eval_result = trainer.evaluate()
     trainer.save_model()
+
+    # 画像プロセッサーの設定を保存
+    image_processor_eval.save_pretrained(args.checkpoint)
+
     if args.push_to_hub:
         trainer.push_to_hub(commit_message="End of training: push best model")
     is_best_loaded = training_args.load_best_model_at_end and (

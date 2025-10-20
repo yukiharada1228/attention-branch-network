@@ -169,6 +169,47 @@ class AbnImageProcessor(ImageProcessingMixin):
         """
         raise NotImplementedError("ABN does not support object detection")
 
+    def to_dict(self):
+        """
+        プロセッサーの設定を辞書形式で返します。
+        preprocessor_config.jsonの生成に使用されます。
+        """
+        output = super().to_dict()
+        output.update(
+            {
+                "do_resize": self.do_resize,
+                "size": self.size,
+                "do_center_crop": self.do_center_crop,
+                "crop_size": self.crop_size,
+                "do_rescale": self.do_rescale,
+                "rescale_factor": self.rescale_factor,
+                "do_normalize": self.do_normalize,
+                "image_mean": self.image_mean,
+                "image_std": self.image_std,
+            }
+        )
+        return output
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        """
+        辞書からプロセッサーを復元します。
+        """
+        # 必要なパラメータを抽出
+        processor_kwargs = {
+            "do_resize": config_dict.get("do_resize", True),
+            "size": config_dict.get("size", {"height": 256, "width": 256}),
+            "do_center_crop": config_dict.get("do_center_crop", True),
+            "crop_size": config_dict.get("crop_size", {"height": 224, "width": 224}),
+            "do_rescale": config_dict.get("do_rescale", True),
+            "rescale_factor": config_dict.get("rescale_factor", 1 / 255),
+            "do_normalize": config_dict.get("do_normalize", True),
+            "image_mean": config_dict.get("image_mean", [0.485, 0.456, 0.406]),
+            "image_std": config_dict.get("image_std", [0.229, 0.224, 0.225]),
+        }
+        processor_kwargs.update(kwargs)
+        return cls(**processor_kwargs)
+
 
 class AbnImageProcessorForTraining(AbnImageProcessor):
     """
@@ -270,3 +311,50 @@ class AbnImageProcessorForTraining(AbnImageProcessor):
         pixel_values = torch.stack(processed_images)
 
         return {"pixel_values": pixel_values}
+
+    def to_dict(self):
+        """
+        学習用プロセッサーの設定を辞書形式で返します。
+        """
+        output = super().to_dict()
+        output.update(
+            {
+                "do_random_resized_crop": self.do_random_resized_crop,
+                "random_crop_size": self.random_crop_size,
+                "do_random_horizontal_flip": self.do_random_horizontal_flip,
+            }
+        )
+        return output
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        """
+        辞書から学習用プロセッサーを復元します。
+        """
+        # 親クラスのパラメータを抽出
+        parent_kwargs = {
+            "do_resize": config_dict.get("do_resize", True),
+            "size": config_dict.get("size", {"height": 256, "width": 256}),
+            "do_center_crop": config_dict.get("do_center_crop", True),
+            "crop_size": config_dict.get("crop_size", {"height": 224, "width": 224}),
+            "do_rescale": config_dict.get("do_rescale", True),
+            "rescale_factor": config_dict.get("rescale_factor", 1 / 255),
+            "do_normalize": config_dict.get("do_normalize", True),
+            "image_mean": config_dict.get("image_mean", [0.485, 0.456, 0.406]),
+            "image_std": config_dict.get("image_std", [0.229, 0.224, 0.225]),
+        }
+
+        # 学習用特有のパラメータを抽出
+        training_kwargs = {
+            "do_random_resized_crop": config_dict.get("do_random_resized_crop", True),
+            "random_crop_size": config_dict.get(
+                "random_crop_size", {"height": 224, "width": 224}
+            ),
+            "do_random_horizontal_flip": config_dict.get(
+                "do_random_horizontal_flip", True
+            ),
+        }
+
+        # 全てのパラメータをマージ
+        all_kwargs = {**parent_kwargs, **training_kwargs, **kwargs}
+        return cls(**all_kwargs)
