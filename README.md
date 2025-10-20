@@ -57,6 +57,10 @@ inputs = processor(images=image, return_tensors="pt")
 with torch.no_grad():
     logits = model(**inputs).logits
     attention_map = model.model.attention_map  # (B,1,H,W)
+
+# model predicts one of the 1000 ImageNet classes
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 ### 可視化
