@@ -76,6 +76,7 @@ def main(args):
         "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
     )
     num_classes = 1000
+    display_classes = args.num_classes
 
     # データセットに前処理を適用（train.pyと同じ方法）
     def preprocess_eval(example):
@@ -128,7 +129,7 @@ def main(args):
         idx_to_cls = [f"Class {i}" for i in range(num_classes)]
     softmax = nn.Softmax(dim=1)
 
-    print(f"データセットから各クラス1枚ずつ（計{num_classes}枚）を収集中...")
+    print(f"データセットから各クラス1枚ずつ（計{display_classes}枚）を収集中...")
 
     with torch.no_grad():
         # 各クラスから一枚ずつ画像を収集
@@ -157,11 +158,11 @@ def main(args):
                         "label": cls_idx,
                     }
 
-                    # 全クラス収集完了
-                    if len(class_data) >= num_classes:
+                    # 指定されたクラス数分収集完了
+                    if len(class_data) >= display_classes:
                         break
 
-            if len(class_data) >= num_classes:
+            if len(class_data) >= display_classes:
                 break
 
     print(f"{len(class_data)}クラスのデータを収集完了")
@@ -215,11 +216,12 @@ def main(args):
     pair_cols = int(math.ceil(num_pairs / rows))
     total_cols = pair_cols * 2
 
-    # 図のサイズ設定
+    # 図のサイズ設定（クラス数に応じて調整）
     fig_w = total_cols * 3
     fig_h = rows * 3.5
 
     print(f"レイアウト: {rows}行 × {pair_cols}ペア（計{total_cols}列）で配置")
+    print(f"表示クラス数: {len(vis_data)}/{display_classes}")
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=args.dpi)
 
@@ -317,6 +319,12 @@ def parse_args():
     )
     p.add_argument(
         "--no-display", action="store_true", help="画像を表示せずに保存のみ実行"
+    )
+    p.add_argument(
+        "--num-classes",
+        type=int,
+        default=10,
+        help="表示するクラス数 (default: 10)",
     )
 
     return p.parse_args()
