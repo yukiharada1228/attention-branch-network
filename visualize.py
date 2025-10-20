@@ -66,7 +66,7 @@ def main(args):
     model.to(device)
     model.eval()
 
-    # 評価用のImageProcessorを初期化（AutoImageProcessorを使用）
+    # 評価用のImageProcessorを初期化
     image_processor = AutoImageProcessor.from_pretrained(
         args.ckpt, trust_remote_code=True
     )
