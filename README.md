@@ -2,7 +2,7 @@
 
 Attention Branch Network（ABN）の実装です。ImageNet-1k（1000クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
-![Attention Maps](outputs/abn_attentions.png?v=1)
+![Attention Maps](outputs/abn_attentions.png)
 
 ## 概要
 
@@ -21,13 +21,12 @@ ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
 
 このプロジェクトで学習したモデルがHugging Face Hubで公開されています：
 
-**🔗 [yukiharada1228/abn-resnet152-imagenet](https://huggingface.co/yukiharada1228/abn-resnet152-imagenet)**（学習完了後に公開予定）
+**🔗 [yukiharada1228/abn-resnet152](https://huggingface.co/yukiharada1228/abn-resnet152)**（学習完了後に公開予定）
 
 ### モデル仕様
 - **アーキテクチャ**: ResNet152 + Attention Branch Network
 - **データセット**: ImageNet-1k (1000クラス)
 - **性能**: 学習完了後に更新予定
-- **モデルサイズ**: 約60M parameters（ImageNet-1k用）
 - **フォーマット**: Safetensors
 
 ### 使用方法
@@ -42,14 +41,13 @@ dataset = load_dataset("huggingface/cats-image")
 image = dataset["test"]["image"][0]
 
 processor = AutoImageProcessor.from_pretrained(
-    "yukiharada1228/abn-resnet152-imagenet",
+    "yukiharada1228/abn-resnet152",
     trust_remote_code=True,
 )
 model = AutoModelForImageClassification.from_pretrained(
-    "yukiharada1228/abn-resnet152-imagenet",
+    "yukiharada1228/abn-resnet152",
     trust_remote_code=True,
 )
-model.eval()
 
 inputs = processor(images=image, return_tensors="pt")
 
@@ -68,7 +66,7 @@ print(model.config.id2label[predicted_label])
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenet --out-dir outputs --prefix abn
+uv run visualize.py --ckpt yukiharada1228/abn-resnet152 --out-dir outputs --prefix abn
 ```
 
 ## 主な機能
