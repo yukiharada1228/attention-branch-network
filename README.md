@@ -36,27 +36,27 @@ ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
 from transformers import AutoModelForImageClassification, AutoImageProcessor
 import torch
 from PIL import Image
+from datasets import load_dataset
 
-# モデルとImageProcessorの読み込み
+dataset = load_dataset("huggingface/cats-image")
+image = dataset["test"]["image"][0]
+
+processor = AutoImageProcessor.from_pretrained(
+    "yukiharada1228/abn-resnet152-imagenet",
+    trust_remote_code=True,
+)
+
 model = AutoModelForImageClassification.from_pretrained(
     "yukiharada1228/abn-resnet152-imagenet",
     trust_remote_code=True,
 )
-image_processor = AutoImageProcessor.from_pretrained(
-    "yukiharada1228/abn-resnet152-imagenet",
-    trust_remote_code=True,
-)
-
 model.eval()
 
-# 画像の前処理
-image = Image.open("path/to/your/image.jpg")
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt")
 
 # 推論
 with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs.logits
+    logits = model(**inputs).logits
     attention_map = model.model.attention_map  # (B,1,H,W)
 ```
 
