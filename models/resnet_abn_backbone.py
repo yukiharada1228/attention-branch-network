@@ -13,15 +13,20 @@ class ResNetABN(ResNet):
         self.att_layer4 = self._make_layer(block, 512, layers[3], stride=1)
 
         # Attention branch
-        self.att_norm = nn.BatchNorm2d(512 * block.expansion)
+        self.bn_att = nn.BatchNorm2d(512 * block.expansion)
         self.att_conv = nn.Conv2d(
-            512 * block.expansion, num_classes, kernel_size=1, bias=False
+            512 * block.expansion, num_classes, kernel_size=1, padding=0, bias=False
         )
-        self.att_norm2 = nn.BatchNorm2d(num_classes)
+        self.bn_att2 = nn.BatchNorm2d(num_classes)
+        self.att_conv2 = nn.Conv2d(
+            num_classes, num_classes, kernel_size=1, padding=0, bias=False
+        )
         self.att_gap = nn.AdaptiveAvgPool2d(1)
 
         # Attention map生成用
-        self.att_conv_map = nn.Conv2d(num_classes, 1, kernel_size=1, bias=False)
+        self.att_conv3 = nn.Conv2d(num_classes, 1, kernel_size=3, padding=1, bias=False)
+        self.bn_att3 = nn.BatchNorm2d(1)
+        self.sigmoid = nn.Sigmoid()
 
         # layer4を再構築（stride=2）
         del self.layer4
@@ -40,21 +45,21 @@ class ResNetABN(ResNet):
         x = self.layer3(x)
 
         # Attention branch
-        a = self.att_layer4(x)
-        a = self.att_norm(a)
-        a = self.relu(a)
-        a = self.att_conv(a)
-        a = self.att_norm2(a)
-        a = self.relu(a)
+        ax = self.att_layer4(x)
+        ax = self.bn_att(ax)
+        ax = self.relu(ax)
+        ax = self.att_conv(ax)
+        ax = self.relu(self.bn_att2(ax))
 
-        # Attention logits
-        att_logits = self.att_gap(a).flatten(1)
-
-        # Attention map
-        att_map = torch.sigmoid(self.att_conv_map(a))
+        # Attention map生成
+        att_map = self.sigmoid(self.bn_att3(self.att_conv3(ax)))
         self.attention_map = att_map
 
-        # Perception branch
+        # Attention logits
+        ax = self.att_conv2(ax)
+        att_logits = self.att_gap(ax).flatten(1)
+
+        # Perception branch (Attention mechanism)
         rx = x * att_map + x
         rx = self.layer4(rx)
         rx = self.avgpool(rx)
