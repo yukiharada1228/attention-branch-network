@@ -200,6 +200,10 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 
 `pyproject.toml` に定義済みです。`uv sync` で環境構築できます。
 
+## 詳細情報
+
+https://deepwiki.com/yukiharada1228/attention-branch-network
+
 ## ライセンス
 
 このリポジトリの `LICENSE` を参照してください。
