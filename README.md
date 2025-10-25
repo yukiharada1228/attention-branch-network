@@ -8,6 +8,10 @@ Attention Branch Network（ABN）の実装です。ImageNet-1k（1000クラス�
 
 このプロジェクトは ABN を ResNet 系バックボーン上に実装し、ImageNet-1k データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
 
+## DeepWiki
+
+https://deepwiki.com/yukiharada1228/attention-branch-network
+
 ## 訓練結果
 
 ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
@@ -200,10 +204,6 @@ uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix
 - TensorBoardX（ログ出力）
 
 `pyproject.toml` に定義済みです。`uv sync` で環境構築できます。
-
-## 詳細情報
-
-https://deepwiki.com/yukiharada1228/attention-branch-network
 
 ## ライセンス
 
