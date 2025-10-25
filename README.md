@@ -130,6 +130,7 @@ attention-branch-network/
 │   └── abn_attentions.png
 ├── train.py               # 学習・評価（HF Trainer）
 ├── visualize.py           # 注意マップ可視化
+├── demo.ipynb             # Jupyter デモノートブック
 ├── main.py                # エントリ（サンプル）
 ├── pyproject.toml         # 依存関係（uv 対応）
 ├── uv.lock
