@@ -14,8 +14,8 @@ from transformers import AutoImageProcessor, AutoModel
 def denormalize_image(img_tensor, mean, std):
     """正規化された画像を元に戻す"""
     img = img_tensor.cpu().numpy().transpose((1, 2, 0))
-    img = img * np.array(std) + np.array(mean)
-    img = np.clip(img * 255.0, 0, 255).astype(np.uint8)
+    img = (img * np.array(std) + np.array(mean)) * 255.0
+    img = np.clip(img, 0, 255).astype(np.uint8)
     return img
 
 
