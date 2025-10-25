@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from datasets import load_dataset
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModel
 
 
 def denormalize_image(img_tensor, mean, std):
@@ -59,9 +59,7 @@ def main(args):
 
     # 学習済みモデルを読み込み
     os.makedirs(args.out_dir, exist_ok=True)
-    model = AutoModelForImageClassification.from_pretrained(
-        args.checkpoint, trust_remote_code=True
-    )
+    model = AutoModel.from_pretrained(args.checkpoint, trust_remote_code=True)
     # 入力テンソルと同じデバイスにモデルを移動
     model.to(device)
     model.eval()
@@ -125,10 +123,10 @@ def main(args):
             images = batch["pixel_values"].to(device)
             labels = batch["labels"].to(device)
 
-            # ABNでは forward は logits のみのため、アテンションは内部に保存されたマップから取得する
-            # 可視化には model.model.attention_map に保存されたアテンションマップを用いる
-            outputs = model(pixel_values=images)["logits"]
-            attention = model.model.attention_map
+            # ABNモデルのforwardメソッドからatt_mapを直接取得
+            model_outputs = model(pixel_values=images)
+            outputs = model_outputs["per_logits"]  # 予測用のlogits
+            attention = model_outputs["att_map"]  # アテンションマップ
             probs = softmax(outputs)
             confidences, predicted = probs.max(1)
 

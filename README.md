@@ -32,7 +32,7 @@ ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
 ### 使用方法
 
 ```python
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+from transformers import AutoModel, AutoImageProcessor
 import torch
 from PIL import Image
 from datasets import load_dataset
@@ -44,7 +44,7 @@ processor = AutoImageProcessor.from_pretrained(
     "yukiharada1228/abn-resnet152",
     trust_remote_code=True,
 )
-model = AutoModelForImageClassification.from_pretrained(
+model = AutoModel.from_pretrained(
     "yukiharada1228/abn-resnet152",
     trust_remote_code=True,
 )
@@ -53,8 +53,9 @@ inputs = processor(images=image, return_tensors="pt")
 
 # 推論
 with torch.no_grad():
-    logits = model(**inputs).logits
-    attention_map = model.model.attention_map  # (B,1,H,W)
+    outputs = model(**inputs)
+    logits = outputs["per_logits"]  # 予測用のlogits
+    attention_map = outputs["att_map"]  # アテンションマップ (B,1,H,W)
 
 # model predicts one of the 1000 ImageNet classes
 predicted_label = logits.argmax(-1).item()
