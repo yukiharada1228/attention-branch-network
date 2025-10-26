@@ -166,44 +166,17 @@ uv sync
 uv run train.py
 ```
 
-- 最良モデルは `--checkpoint` で指定したディレクトリに保存されます（例: `checkpoint/model.safetensors`）。
-- 学習途中のチェックポイントは `checkpoint-XXXX/` 形式で保存されます。
-- ログ: TensorBoard 互換のイベントファイルを `checkpoint/runs/` に出力します。
-
 #### 評価のみ
 
 ```bash
-uv run train.py --evaluate --checkpoint checkpoint --gpu-id 0
+uv run train.py --evaluate --checkpoint checkpoint
 ```
 
 ### 可視化（注意マップ）
 
-最良モデル（`checkpoint/model.safetensors`）または任意の `checkpoint-XXXX/` を指定できます。
-
 ```bash
-# 最良モデルから可視化（既定パス）
-uv run visualize.py --ckpt checkpoint/model.safetensors --out-dir outputs --prefix abn
-
-# あるエポックの ckpt を指定
-uv run visualize.py --ckpt checkpoint/checkpoint-1924 --out-dir outputs --prefix abn
+uv run visualize.py
 ```
-
-主なオプション:
-
-- 学習（train.py）
-  - `--arch {resnet18,resnet34,resnet50,resnet101,resnet152}`（既定: `resnet152`）
-  - `-j/--workers`（既定: 4）
-  - `--train-batch`（既定: 64）/`--test-batch`（既定: 100）
-  - `--epochs`（既定: 90）/`--lr`（既定: 0.1）/`--momentum`（既定: 0.9）/`--wd`（既定: 1e-4）
-  - `--schedule`（既定: `31 61`）/`--gamma`（既定: 0.1）
-  - `--checkpoint`（出力先、既定: `checkpoint`）/`--resume`（学習再開）
-  - `--evaluate`（評価のみ）/`--gpu-id`（CUDA デバイス指定）/`--push-to-hub`（任意）
-
-- 可視化（visualize.py）
-  - `--ckpt`（既定: `checkpoint/model.safetensors`。`checkpoint-XXXX/` も可）
-  - `--out-dir`（既定: `outputs`）/`--prefix`（既定: `abn`）/`--dpi`（既定: 200）
-  - `--attention-alpha`（0.0–1.0、既定: 1.0。1.0で単純加算）/`--no-display`
-  - `--num-classes`（表示するクラス数、既定: 10）/`--arch` / `-j/--workers` / `--gpu-id` または `--cpu`
 
 ## 可視化結果・アルゴリズム
 
