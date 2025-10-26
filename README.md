@@ -112,7 +112,7 @@ uv run visualize.py --ckpt yukiharada1228/abn-resnet152 --out-dir outputs --pref
 - **画像処理モジュール**: `image_processing_abn.py` で画像の前処理・後処理を統合管理
 - **複数の ResNet 対応**: ResNet18/34/50/101/152
 - **Trainer 連携**: 最良モデルの自動保存・読み込みに対応
-- **チェックポイント互換**: `model.safetensors` と `checkpoint-XXXX` のどちらからでも可視化可能
+- **チェックポイント互換**: `model.safetensors` から可視化可能
 
 ## プロジェクト構造
 
