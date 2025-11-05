@@ -33,10 +33,25 @@ class AbnConfig(PretrainedConfig):
         elif label2id is None:
             label2id = {v: k for k, v in id2label.items()}
 
+        # AutoClass 用のマッピングが欠けている場合は補完
+        auto_map = kwargs.pop("auto_map", {}) or {}
+        if not isinstance(auto_map, dict):
+            raise TypeError("`auto_map` must be a dict when provided.")
+        auto_map.setdefault("AutoConfig", "configuration_abn.AbnConfig")
+        auto_map.setdefault("AutoModel", "modeling_abn.AbnModel")
+        auto_map.setdefault(
+            "AutoModelForImageClassification",
+            "modeling_abn.AbnModelForImageClassification",
+        )
+
         # 先に PretrainedConfig 側へマッピングと num_labels を渡す
         # （kwargs は順序保持されるため id2label/label2id -> num_labels の順で評価される）
         super().__init__(
-            id2label=id2label, label2id=label2id, num_labels=num_labels, **kwargs
+            id2label=id2label,
+            label2id=label2id,
+            num_labels=num_labels,
+            auto_map=auto_map,
+            **kwargs,
         )
 
         # カスタム項目
