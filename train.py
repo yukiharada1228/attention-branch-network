@@ -5,11 +5,11 @@ import random
 
 import numpy as np
 import torch
-from datasets import load_dataset
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from abn import (AbnConfig, AbnImageProcessor, AbnImageProcessorForTraining,
                  AbnModelForImageClassification, register_for_auto_class)
+from imagenette_utils import ImagenetteDictDataset, normalize_class_name
 
 
 class TrainingModeCallback(TrainerCallback):
@@ -94,17 +94,15 @@ def main(args):
     image_processor_train = AbnImageProcessorForTraining()
     image_processor_eval = AbnImageProcessor()
 
-    # ImageNet 2012 Classification Dataset（1000クラス）
-    # https://huggingface.co/datasets/ILSVRC/imagenet-1k
-    num_classes = 1000
-
-    # Hugging Face datasetsからImageNet-1kを読み込み
-    train_data = load_dataset(
-        "ILSVRC/imagenet-1k", split="train", trust_remote_code=True
+    # Imagenetteデータセット（10クラス）
+    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
+    train_data = ImagenetteDictDataset(
+        root=args.data_root, split="train", size=args.imagenette_size, download=True
     )
-    test_data = load_dataset(
-        "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
+    test_data = ImagenetteDictDataset(
+        root=args.data_root, split="val", size=args.imagenette_size, download=True
     )
+    num_classes = len(train_data.classes)
 
     # 学習/評価用モデル準備
     if args.evaluate:
@@ -114,23 +112,10 @@ def main(args):
         # 評価時は画像プロセッサーも読み込み
         image_processor_eval = AbnImageProcessor.from_pretrained(args.checkpoint)
     else:
-        # ImageNet-1kのクラス名を取得してラベルマッピングを作成
-        try:
-            # データセットの特徴量からクラス名を取得
-            features = train_data.features
-            if "label" in features and hasattr(features["label"], "int2str"):
-                # int2strマッピングを使用してクラス名を取得
-                id2label = {i: features["label"].int2str(i) for i in range(num_classes)}
-                label2id = {name: i for i, name in id2label.items()}
-            else:
-                # フォールバック：数値ラベルのまま使用
-                id2label = None
-                label2id = None
-        except Exception as e:
-            print(f"Warning: Could not extract class names from dataset: {e}")
-            # フォールバック：数値ラベルのまま使用
-            id2label = None
-            label2id = None
+        # Imagenetteのクラス名を取得してラベルマッピングを作成
+        class_names = [normalize_class_name(name) for name in train_data.classes]
+        id2label = {i: name for i, name in enumerate(class_names)}
+        label2id = {name: i for i, name in id2label.items()}
 
         config = AbnConfig(
             arch=args.arch,
@@ -320,7 +305,7 @@ def parse_args():
         "--arch",
         "-a",
         metavar="ARCH",
-        default="resnet152",
+        default="resnet18",
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         help="model architecture",
     )
@@ -337,6 +322,19 @@ def parse_args():
     # Device options
     p.add_argument(
         "--gpu-id", default="0", type=str, help="id(s) for CUDA_VISIBLE_DEVICES"
+    )
+    p.add_argument(
+        "--data-root",
+        type=str,
+        default="data/imagenette",
+        help="Imagenetteデータセットのルートディレクトリ (default: data/imagenette)",
+    )
+    p.add_argument(
+        "--imagenette-size",
+        type=str,
+        default="full",
+        choices=["full", "320px", "160px"],
+        help="Imagenetteの画像サイズバリエーション (default: full)",
     )
     # Extra
     p.add_argument(

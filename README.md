@@ -1,20 +1,16 @@
 # attention-branch-network
 
-Attention Branch Network（ABN）の実装です。ImageNet-1k（1000クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
+Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagenette`（10クラス）を用いた画像分類に適用し、モデルがどこを見て予測したかを可視化できます。
 
 ![Attention Maps](outputs/abn_attentions.png)
 
 ## 概要
 
-このプロジェクトは ABN を ResNet 系バックボーン上に実装し、ImageNet-1k データセットでの学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
-
-## DeepWiki
-
-https://deepwiki.com/yukiharada1228/attention-branch-network
+このプロジェクトは ABN を ResNet 系バックボーン上に実装し、Imagenette データセット（`full` / `320px` / `160px`）での学習・評価・可視化を行います。学習には Hugging Face `Trainer` を用い、学習率スケジュールやチェックポイント保存を簡潔に扱えるようにしています。
 
 ## 訓練結果
 
-ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
+ResNet18 + ABN での Imagenette 10クラス分類の結果:
 
 - **Top-1 Accuracy**: 学習中（結果は学習完了後に更新予定）
 - **Top-5 Accuracy**: 学習中（結果は学習完了後に更新予定）
@@ -23,93 +19,34 @@ ResNet152 + ABN での ImageNet-1k 1000クラス分類の結果:
 
 ## 学習済みモデル
 
-このプロジェクトで学習したモデルがHugging Face Hubで公開されています：
+このプロジェクトで学習したモデルがHugging Face Hubで公開されています（Imagenette 10クラス向けモデル、公開準備中）：
 
-**🔗 [yukiharada1228/abn-resnet152](https://huggingface.co/yukiharada1228/abn-resnet152)**（学習完了後に公開予定）
+**🔗 [yukiharada1228/abn-resnet18-imagenette](https://huggingface.co/yukiharada1228/abn-resnet18-imagenette)**（学習完了後に公開予定）
 
 ### モデル仕様
-- **アーキテクチャ**: ResNet152 + Attention Branch Network
-- **データセット**: ImageNet-1k (1000クラス)
+- **アーキテクチャ**: ResNet18 + Attention Branch Network
+- **データセット**: imagenette (10クラス)
 - **性能**: 学習完了後に更新予定
 - **フォーマット**: Safetensors
 
 ### 使用方法
 
-```python
-from transformers import AutoModel, AutoImageProcessor
-import torch
-from datasets import load_dataset
-
-dataset = load_dataset("huggingface/cats-image")
-image = dataset["test"]["image"][0]
-
-processor = AutoImageProcessor.from_pretrained(
-    "yukiharada1228/abn-resnet152",
-    trust_remote_code=True,
-)
-model = AutoModel.from_pretrained(
-    "yukiharada1228/abn-resnet152",
-    trust_remote_code=True,
-)
-
-inputs = processor(images=image, return_tensors="pt")
-
-# 推論
-with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs["per_logits"]  # 予測用のlogits
-    attention_map = outputs["att_map"]  # アテンションマップ (B,1,H,W)
-
-# モデルは1000クラスのImageNetいずれかを予測します
-predicted_label = logits.argmax(-1).item()
-print(model.config.id2label[predicted_label])
-
-# アテンションマップの可視化
-import cv2
-import matplotlib.pyplot as plt
-import numpy as np
-
-# 画像の前処理（BGR形式に変換）
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
-img_tensor = inputs["pixel_values"][0]
-img_rgb = img_tensor.cpu().numpy().transpose((1, 2, 0))
-img_rgb = (img_rgb * np.array(std) + np.array(mean)) * 255.0  # 正規化を元の画像スケール(RGB,0-255)に戻す
-img_rgb = np.clip(img_rgb, 0, 255).astype(np.uint8)
-img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-
-# アテンションマップを画像サイズにリサイズ
-att_map = attention_map[0, 0].cpu().numpy()  # (H, W)
-h, w = img_bgr.shape[:2]
-att_resized = cv2.resize(att_map, (w, h))
-
-# ヒートマップを生成
-att_scaled = (att_resized * 255.0).astype(np.uint8)
-jet_map = cv2.applyColorMap(att_scaled, cv2.COLORMAP_JET)
-
-# アテンションヒートマップを原画像に重ね合わせ
-overlay = cv2.add(img_bgr, jet_map)
-
-# 可視化
-plt.imshow(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
-plt.title("可視化:アテンション×原画像")
-plt.axis('off')
-plt.show()
-```
+> モデル公開時に Imagenette 用推論サンプルを記載予定です。
 
 ### 可視化
 
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet152 --out-dir outputs --prefix abn
+uv run visualize.py --ckpt yukiharada1228/abn-resnet18-imagenette --out-dir outputs --prefix abn
 ```
 
 ## 主な機能
 
-- **ImageNet-1k 1000クラス分類**: Hugging Face datasetsから自動ダウンロード
+- **Imagenette 10クラス分類**: `torchvision.datasets.Imagenette`を利用
 - **注意機構の可視化**: 原画像とヒートマップ重畳を横並びペアでグリッド保存（指定したクラス数分のサンプルを表示）
 - **画像処理モジュール**: `image_processing_abn.py` で画像の前処理・後処理を統合管理
+- **Imagenetteユーティリティ**: `imagenette_utils.py` に共通ラッパーとクラス名整形処理を集約
 - **複数の ResNet 対応**: ResNet18/34/50/101/152
 - **Trainer 連携**: 最良モデルの自動保存・読み込みに対応
 - **チェックポイント互換**: `model.safetensors` から可視化可能
@@ -128,6 +65,7 @@ attention-branch-network/
 │   └── runs/              # TensorBoard 互換ログ
 ├── outputs/               # 可視化結果（まとめ画像）
 │   └── abn_attentions.png
+├── imagenette_utils.py    # Imagenette用ユーティリティ
 ├── train.py               # 学習・評価（HF Trainer）
 ├── visualize.py           # 注意マップ可視化
 ├── demo.ipynb             # Jupyter デモノートブック
@@ -150,13 +88,15 @@ attention-branch-network/
 uv sync
 ```
 
-## データセット（ImageNet-1k）
+## データセット（Imagenette）
 
-`train.py`/`visualize.py` は初回実行時に ImageNet-1k を自動ダウンロードします。
+`train.py` / `visualize.py` は初回実行時に Imagenette を自動ダウンロードします。
 
-- データソース: Hugging Face datasets (`ILSVRC/imagenet-1k`)
-- クラス数: 1000クラス
-- 分割: train（学習用）、validation（評価用）
+- データソース: `torchvision.datasets.Imagenette`
+- クラス数: 10クラス（ImageNetのサブセット）
+- サイズ: `full`（既定）、`320px`、`160px`を選択可能（`--imagenette-size`）
+- ディレクトリ: 既定で `data/imagenette` に保存（`--data-root` で変更可能）
+- 分割: train（学習用）、val（評価用）
 
 ## 使い方
 

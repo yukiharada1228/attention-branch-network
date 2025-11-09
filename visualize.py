@@ -7,8 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-from datasets import load_dataset
 from transformers import AutoImageProcessor, AutoModel
+
+from imagenette_utils import ImagenetteDictDataset, normalize_class_name
 
 
 def denormalize_image(img_tensor, mean, std):
@@ -69,11 +70,15 @@ def main(args):
         args.checkpoint, trust_remote_code=True
     )
 
-    # ImageNet-1kデータセットを読み込み
-    test_data = load_dataset(
-        "ILSVRC/imagenet-1k", split="validation", trust_remote_code=True
+    # Imagenetteデータセット（10クラス）を読み込み
+    # https://docs.pytorch.org/vision/main/generated/torchvision.datasets.Imagenette.html
+    test_data = ImagenetteDictDataset(
+        root=args.data_root,
+        split="val",
+        size=args.imagenette_size,
+        download=True,
     )
-    num_classes = 1000
+    num_classes = len(test_data.classes)
     display_classes = args.num_classes
 
     # DataCollatorを作成
@@ -102,15 +107,7 @@ def main(args):
     )
 
     # クラス名を取得
-    try:
-        features = test_data.features
-        if "label" in features and hasattr(features["label"], "int2str"):
-            idx_to_cls = [features["label"].int2str(i) for i in range(num_classes)]
-        else:
-            idx_to_cls = [f"Class {i}" for i in range(num_classes)]
-    except Exception as e:
-        print(f"Warning: Could not extract class names from dataset: {e}")
-        idx_to_cls = [f"Class {i}" for i in range(num_classes)]
+    idx_to_cls = [normalize_class_name(name) for name in test_data.classes]
     softmax = nn.Softmax(dim=1)
 
     print(f"データセットから各クラス1枚ずつ（計{display_classes}枚）を収集中...")
@@ -310,6 +307,19 @@ def parse_args():
         type=int,
         default=10,
         help="表示するクラス数 (default: 10)",
+    )
+    p.add_argument(
+        "--data-root",
+        type=str,
+        default="data/imagenette",
+        help="Imagenetteデータセットのルートディレクトリ (default: data/imagenette)",
+    )
+    p.add_argument(
+        "--imagenette-size",
+        type=str,
+        default="full",
+        choices=["full", "320px", "160px"],
+        help="Imagenetteの画像サイズバリエーション (default: full)",
     )
 
     return p.parse_args()
