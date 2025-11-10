@@ -305,7 +305,7 @@ def parse_args():
         "--arch",
         "-a",
         metavar="ARCH",
-        default="resnet18",
+        default="resnet152",
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         help="model architecture",
     )

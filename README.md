@@ -10,7 +10,7 @@ Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagene
 
 ## 訓練結果
 
-ResNet18 + ABN での Imagenette 10クラス分類の結果:
+ResNet152 + ABN での Imagenette 10クラス分類の結果:
 
 - **Top-1 Accuracy**: 学習中（結果は学習完了後に更新予定）
 - **Top-5 Accuracy**: 学習中（結果は学習完了後に更新予定）
@@ -21,10 +21,10 @@ ResNet18 + ABN での Imagenette 10クラス分類の結果:
 
 このプロジェクトで学習したモデルがHugging Face Hubで公開されています（Imagenette 10クラス向けモデル、公開準備中）：
 
-**🔗 [yukiharada1228/abn-resnet18-imagenette](https://huggingface.co/yukiharada1228/abn-resnet18-imagenette)**（学習完了後に公開予定）
+**🔗 [yukiharada1228/abn-resnet152-imagenette](https://huggingface.co/yukiharada1228/abn-resnet152-imagenette)**（学習完了後に公開予定）
 
 ### モデル仕様
-- **アーキテクチャ**: ResNet18 + Attention Branch Network
+- **アーキテクチャ**: ResNet152 + Attention Branch Network
 - **データセット**: imagenette (10クラス)
 - **性能**: 学習完了後に更新予定
 - **フォーマット**: Safetensors
@@ -38,7 +38,7 @@ ResNet18 + ABN での Imagenette 10クラス分類の結果:
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet18-imagenette --out-dir outputs --prefix abn
+uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette --out-dir outputs --prefix abn
 ```
 
 ## 主な機能
