@@ -12,10 +12,9 @@ Attention Branch Network（ABN）の実装です。`torchvision.datasets.Imagene
 
 ResNet152 + ABN での Imagenette 10クラス分類の結果:
 
-- **Top-1 Accuracy**: 学習中（結果は学習完了後に更新予定）
-- **Top-5 Accuracy**: 学習中（結果は学習完了後に更新予定）
-- **Validation Loss**: 学習中（結果は学習完了後に更新予定）
-- **Training Epochs**: 90 epochs（既定値）
+- **Top-1 Accuracy**: 0.8540
+- **Top-5 Accuracy**: 0.9758
+- **Training Epochs**: 90 epochs
 
 ## 学習済みモデル
 
@@ -38,7 +37,7 @@ ResNet152 + ABN での Imagenette 10クラス分類の結果:
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette
+uv run visualize.py -c yukiharada1228/abn-resnet152-imagenette
 ```
 
 ## 主な機能
