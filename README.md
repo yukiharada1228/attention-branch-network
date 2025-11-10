@@ -38,7 +38,7 @@ ResNet152 + ABN での Imagenette 10クラス分類の結果:
 学習済みモデルを使用した可視化：
 
 ```bash
-uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette --out-dir outputs --prefix abn
+uv run visualize.py --ckpt yukiharada1228/abn-resnet152-imagenette
 ```
 
 ## 主な機能
