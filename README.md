@@ -20,7 +20,7 @@ ResNet152 + ABN での Imagenette 10クラス分類の結果:
 
 このプロジェクトで学習したモデルがHugging Face Hubで公開されています（Imagenette 10クラス向けモデル、公開準備中）：
 
-**🔗 [yukiharada1228/abn-resnet152-imagenette](https://huggingface.co/yukiharada1228/abn-resnet152-imagenette)**（学習完了後に公開予定）
+**🔗 [yukiharada1228/abn-resnet152-imagenette](https://huggingface.co/yukiharada1228/abn-resnet152-imagenette)**
 
 ### モデル仕様
 - **アーキテクチャ**: ResNet152 + Attention Branch Network
